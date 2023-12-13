@@ -193,7 +193,7 @@ def optimal_matrix_fidelity(dmA):
         paramsA = params[:3]
         paramsB = params[3:-1]
         return -1*matrix_fidelity(rotate_matrix(matrixB, paramsA, paramsB), matrixA)
-    bounds = [(0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0, pi/2)]
+    bounds = [(0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0, pi/4)]
     res = differential_evolution(f, args=(dmA,), bounds=bounds)
     return {'value': -res['fun'], 'angle': res['x'][-1], 'parameters': [res['x'][:3].tolist(), res['x'][3:6].tolist()]}
 
