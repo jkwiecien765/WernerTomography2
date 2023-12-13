@@ -393,7 +393,7 @@ def mean_over_unitars2(initial_matrix, N=100000, recording=False):
 '''MEASURES'''
 
 def concurrence(dm):
-    rho = dm.matrix if type(dm)==density_matrix else dm
+    rho = dm.matrix if type(dm)==density_matrix else np.matrix(dm)  #making sure rho is of np.matrix type
     rhod = tens_prod2d(Pauli[2], Pauli[2])@rho.getH()@tens_prod2d(Pauli[2], Pauli[2])
     lambs = np.linalg.eigvals(rho@rhod)
     lambs = np.sqrt(lambs)
@@ -402,15 +402,15 @@ def concurrence(dm):
     return np.real(C)
      
 def correlation_matrix(dm):
-    rho = dm.matrix if type(dm)==density_matrix else dm
+    rho = dm.matrix if type(dm)==density_matrix else dm #making sure rho is of np.matrix type
     T=np.zeros((3,3), dtype=complex)
     for i in range(3):
         for j in range(3):
-            T[i][j] = np.trace(rho@tens_prod2d(Pauli[i+1], Pauli[j+1]))
+            T[i][j] = np.trace(rho@tens_prod2d(Pauli[i+1], Pauli[j+1])) #Pauli[0] is identity
     return np.asmatrix(np.real(T))
 
 def CHSHviolation_measure(dm):
-    rho = dm.matrix if type(dm)==density_matrix else dm
+    rho = dm.matrix if type(dm)==density_matrix else dm  #making sure rho is of np.matrix type
     T = correlation_matrix(rho)
     U = T.transpose()@T
     lambs = np.linalg.eigvals(U)
