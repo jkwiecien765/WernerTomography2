@@ -316,7 +316,7 @@ def rand_PSDM():
     '''Generates a 4x4 matrix of a Positive Semi-definite matrix with trace 1'''
     mat=np.array(np.random.rand(4,4))
     # Any matrix that is product of B.BT where B is a real-valued invertible matriix is PSDM 
-    PSDM = mat*(mat.T)
+    PSDM = np.matmul(mat,np.transpose(mat))
     PSDM /= np.trace(PSDM)
     
     if(abs(1-np.trace(PSDM))>1e-7):
@@ -496,10 +496,10 @@ class density_matrix:
             bins=np.linspace(0,1,BinNum+1)
             counts=np.zeros(BinNum)
         for dat in self.data:
-            if dat>1 or dat<0:
-                print(self.matrix)
-                raise(IndexError)
-            counts[int(dat*BinNum)]+=1/len(self.data)
+            try:
+                counts[int(dat*BinNum)]+=1/len(self.data)
+            except IndexError:
+                pass
         Bins={
             "counts" : counts,
             "bins" : bins
@@ -579,10 +579,13 @@ def bins2curve(Bins):
 
 def data_generator(dm=None):
     dm = density_matrix(rand_PSDM()) if dm==None else dm
+    dm.name = 'rand_PSDM'
     ans = optimal_matrix_fidelity(dm)
     angle = ans['angle']
     rotation = ans['parameters']
     opt_matrix, vis = vis_optimizer_dm(dm, density_matrix(rotate_matrix(rho2(angle, 1), rotation[0], rotation[1])), printing = False)
+    opt_matrix.name = 'angle=' + str(angle) + ', vis=' + str(vis)
+    opt_matrix.matrix = opt_matrix.matrix/np.trace(opt_matrix.matrix)
     hist = dm.bins()['counts'].tolist()
     
     return {'Matrix': dm.matrix.tolist(), 'Bins': hist, 'Angle': angle, 'Visibility': vis, 'Rotation': rotation,
