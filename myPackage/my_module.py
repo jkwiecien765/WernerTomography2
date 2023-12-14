@@ -8,20 +8,6 @@ from numpy import pi
 from .__init__ import parameters
 
 
-
-'''__all__ = [
-    'rho2',
-    'rand_phase',
-    'obs',
-    'classical_fidelity',
-    'quantum_fidelity',
-    'Frobenius_dist',
-    'vis_optimizer',
-    'rand_PSDM',
-    'mean_over_unitars',
-    'density_matrix'    
-]'''
-
 np.set_printoptions(precision=5,suppress=True)
      
 
@@ -117,9 +103,11 @@ def rotate_matrix(matrix, paramsA, paramsB):
     uAB = tens_prod2d(uA, uB)
     return np.transpose(np.conjugate(uAB))@matrix@uAB   
 
-def obs(rho,parA = rand_phase(), parB = rand_phase()):
+def obs(rho,parA = None, parB = None):
     '''Simulation of observation of density matrix with unitary matrices of given parameters (defaults to random) 
         returns probability of observation as being in 00 state'''
+    parA = rand_phase() if parA == None else parA
+    parB = rand_phase() if parB == None else parB
     uA = unitary_mat2(parA)
     uB = unitary_mat2(parB)    
     u=tens_prod2d(uA,uB)
@@ -508,6 +496,9 @@ class density_matrix:
             bins=np.linspace(0,1,BinNum+1)
             counts=np.zeros(BinNum)
         for dat in self.data:
+            if dat>1 or dat<0:
+                print(self.matrix)
+                raise(IndexError)
             counts[int(dat*BinNum)]+=1/len(self.data)
         Bins={
             "counts" : counts,
