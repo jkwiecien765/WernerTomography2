@@ -115,7 +115,7 @@ def rotate_matrix(matrix, paramsA, paramsB):
     uA = unitary_mat2(paramsA)
     uB = unitary_mat2(paramsB)
     uAB = tens_prod2d(uA, uB)
-    return uAB.getH()@matrix@uAB   
+    return np.transpose(np.conjugate(uAB))@matrix@uAB   
 
 def obs(rho,parA = rand_phase(), parB = rand_phase()):
     '''Simulation of observation of density matrix with unitary matrices of given parameters (defaults to random) 
@@ -124,7 +124,7 @@ def obs(rho,parA = rand_phase(), parB = rand_phase()):
     uB = unitary_mat2(parB)    
     u=tens_prod2d(uA,uB)
     zer=np.outer(ZeroZero,ZeroZero)
-    p=rho@(u.getH())@zer@u
+    p=rho@(np.transpose(np.conjugate(u)))@zer@u
     return np.real(np.trace(p))
 
 
@@ -239,7 +239,7 @@ def Frobenius_dist(A, B):
     B=B.matrix if type(B)==density_matrix else B
         
     D=A-B
-    dist=np.sqrt(np.real(np.trace(D.getH()@D)))
+    dist=np.sqrt(np.real(np.trace(np.transpose(np.conjugate(D))@D)))
     return dist
     
     
@@ -348,7 +348,7 @@ def mean_over_unitars(matrix, N=100000, recording=False):
         uA=np.array(unitary_mat2(param[0]))
         uB=np.array(unitary_mat2(param[1]))
         u=tens_prod2d(uA,uB)
-        matrix = u@matrix@(u.getH())
+        matrix = u@matrix@(np.transpose(np.conjugate(u)))
         matrix = np.real(matrix)
         #matrix /= np.trace(matrix)
     if recording:
@@ -375,7 +375,7 @@ def mean_over_unitars2(initial_matrix, N=100000, recording=False):
         uA=np.array(unitary_mat2(param[0]))
         uB=np.array(unitary_mat2(param[1]))
         u=tens_prod2d(uA,uB)
-        final_matrix += np.real(u@initial_matrix@(u.getH())/N)
+        final_matrix += np.real(u@initial_matrix@(np.transpose(np.conjugate(u)))/N)
         if recording:
             matrix=final_matrix*N/len(record)
             ser=pd.Series(np.asarray(matrix).flatten()).to_frame().T
@@ -394,7 +394,7 @@ def mean_over_unitars2(initial_matrix, N=100000, recording=False):
 
 def concurrence(dm):
     rho = dm.matrix if type(dm)==density_matrix else np.array(dm)  #making sure rho is of np.array type
-    rhod = tens_prod2d(Pauli[2], Pauli[2])@rho.getH()@tens_prod2d(Pauli[2], Pauli[2])
+    rhod = tens_prod2d(Pauli[2], Pauli[2])@np.transpose(np.conjugate(rho))@tens_prod2d(Pauli[2], Pauli[2])
     lambs = np.linalg.eigvals(rho@rhod)
     lambs = np.sqrt(lambs)
     l1 = max(lambs)
