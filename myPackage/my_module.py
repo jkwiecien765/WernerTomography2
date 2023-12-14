@@ -44,10 +44,10 @@ OneZero=np.array([0,1,0,0])
 OneOne=np.array([1,0,0,0])
 
 #Pauli matrices
-Pauli = (np.matrix([[1,0],[0,1]], dtype=complex), np.matrix([[0,1],[1,0]], dtype = complex), 
-         np.matrix([[0, 0+1j],[0-1j, 0]], dtype= complex), np.matrix([[1,0],[0,-1]], dtype=complex))
+Pauli = (np.array([[1,0],[0,1]], dtype=complex), np.array([[0,1],[1,0]], dtype = complex), 
+         np.array([[0, 0+1j],[0-1j, 0]], dtype= complex), np.array([[1,0],[0,-1]], dtype=complex))
 #Antidiagonal identity matrix
-F = np.matrix([[0,0,0,1],
+F = np.array([[0,0,0,1],
                 [0,0,1,0],
                 [0,1,0,0],
                 [1,0,0,0]])
@@ -59,7 +59,7 @@ def tens_prod2d(u1,u2):
     ua=np.concatenate((U[0][0],U[0][1]),1)
     ub=np.concatenate((U[1][0],U[1][1]),1)
     u3=np.concatenate((ua,ub),0)
-    return np.asmatrix(u3)
+    return np.array(u3)
 
 
 def unitary_mat2(params):
@@ -67,7 +67,7 @@ def unitary_mat2(params):
     th = params[0]
     alpha = params[1]
     beta = params[2]
-    u1=np.asmatrix([[np.exp(1j* alpha)*np.cos(th), np.exp(1j* beta)*np.sin(th)],\
+    u1=np.array([[np.exp(1j* alpha)*np.cos(th), np.exp(1j* beta)*np.sin(th)],\
                     [-np.exp(-1j* beta)*np.sin(th),np.exp(-1j* alpha)*np.cos(th)]])
     return u1
 
@@ -82,7 +82,7 @@ def unitary_mat3(L=2):
             print(mat2[i], end=' ')
             mat2[i] /= np.sqrt(np.real(np.inner(np.conjugate(mat2[i]), mat2[i])))
             print(mat2[i])
-    return np.asmatrix(mat2)
+    return np.array(mat2)
 
 #Density matrix of Werner state and its generalisation
 def rho2(th, vis):
@@ -326,7 +326,7 @@ def vis_optimizer_dm(dm2, dm1, plot=False, N=200, printing=True):
 
 def rand_PSDM():
     '''Generates a 4x4 matrix of a Positive Semi-definite matrix with trace 1'''
-    mat=np.matrix(np.random.rand(4,4))
+    mat=np.array(np.random.rand(4,4))
     # Any matrix that is product of B.BT where B is a real-valued invertible matriix is PSDM 
     PSDM = mat*(mat.T)
     PSDM /= np.trace(PSDM)
@@ -339,14 +339,14 @@ def rand_PSDM():
         
 def mean_over_unitars(matrix, N=100000, recording=False):
     '''Takes a matrix or 4x4 list/ndarray and translates it N times over unitary matrices. If recording=True, it returns also a pandas.DataFrame with each iteration of the loop'''
-    matrix=np.asmatrix(matrix)
+    matrix=np.array(matrix)
     record=pd.DataFrame()
     for param in parameters[0:N]:
         if recording:
             ser=pd.Series(np.append(np.asarray(matrix).flatten(), np.trace(matrix))).to_frame().T
             record=pd.concat([record, ser])    
-        uA=np.asmatrix(unitary_mat2(param[0]))
-        uB=np.asmatrix(unitary_mat2(param[1]))
+        uA=np.array(unitary_mat2(param[0]))
+        uB=np.array(unitary_mat2(param[1]))
         u=tens_prod2d(uA,uB)
         matrix = u@matrix@(u.getH())
         matrix = np.real(matrix)
@@ -362,8 +362,8 @@ def mean_over_unitars(matrix, N=100000, recording=False):
 
 def mean_over_unitars2(initial_matrix, N=100000, recording=False):
     '''Takes a matrix or 4x4 list/ndarray and takes average of N translations over unitary matrices. If recording=True, it returns also a pandas.DataFrame with each iteration of the loop'''
-    initial_matrix = np.asmatrix(initial_matrix)
-    final_matrix = np.asmatrix(np.zeros([4,4]))
+    initial_matrix = np.array(initial_matrix)
+    final_matrix = np.array(np.zeros([4,4]))
     record = pd.DataFrame()
     matrix=final_matrix
     ser=pd.Series(np.asarray(matrix).flatten()).to_frame().T
@@ -372,8 +372,8 @@ def mean_over_unitars2(initial_matrix, N=100000, recording=False):
     for param in parameters[0:N]:
         
                 
-        uA=np.asmatrix(unitary_mat2(param[0]))
-        uB=np.asmatrix(unitary_mat2(param[1]))
+        uA=np.array(unitary_mat2(param[0]))
+        uB=np.array(unitary_mat2(param[1]))
         u=tens_prod2d(uA,uB)
         final_matrix += np.real(u@initial_matrix@(u.getH())/N)
         if recording:
@@ -393,7 +393,7 @@ def mean_over_unitars2(initial_matrix, N=100000, recording=False):
 '''MEASURES'''
 
 def concurrence(dm):
-    rho = dm.matrix if type(dm)==density_matrix else np.matrix(dm)  #making sure rho is of np.matrix type
+    rho = dm.matrix if type(dm)==density_matrix else np.array(dm)  #making sure rho is of np.array type
     rhod = tens_prod2d(Pauli[2], Pauli[2])@rho.getH()@tens_prod2d(Pauli[2], Pauli[2])
     lambs = np.linalg.eigvals(rho@rhod)
     lambs = np.sqrt(lambs)
@@ -402,15 +402,15 @@ def concurrence(dm):
     return np.real(C)
      
 def correlation_matrix(dm):
-    rho = dm.matrix if type(dm)==density_matrix else dm #making sure rho is of np.matrix type
+    rho = dm.matrix if type(dm)==density_matrix else dm #making sure rho is of np.array type
     T=np.zeros((3,3), dtype=complex)
     for i in range(3):
         for j in range(3):
             T[i][j] = np.trace(rho@tens_prod2d(Pauli[i+1], Pauli[j+1])) #Pauli[0] is identity
-    return np.asmatrix(np.real(T))
+    return np.array(np.real(T))
 
 def CHSHviolation_measure(dm):
-    rho = dm.matrix if type(dm)==density_matrix else dm  #making sure rho is of np.matrix type
+    rho = dm.matrix if type(dm)==density_matrix else dm  #making sure rho is of np.array type
     T = correlation_matrix(rho)
     U = T.transpose()@T
     lambs = np.linalg.eigvals(U)
@@ -426,7 +426,7 @@ class density_matrix:
     def __init__(self, rho, name=''):
         if np.shape(rho)!=(4,4):
             raise TypeError("Density matrix must be 4x4 array")
-        self.matrix=np.asmatrix(rho)
+        self.matrix=np.array(rho)
         self.name=name
         
     def __str__(self):
