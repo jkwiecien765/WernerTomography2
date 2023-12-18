@@ -464,7 +464,7 @@ class density_matrix:
     
     def range(self):
         if len(self.data)==0:    
-            print("setting density_matrix data...")
+            #print("setting density_matrix data...")
             self.set() 
         mi=np.round(min(self.data),3)
         ma=np.round(max(self.data),3)
@@ -472,7 +472,7 @@ class density_matrix:
     
     def histogram(self, BinNum=100, AdjustBins=False):
         if len(self.data)==0:    
-            print("setting density_matrix data...")
+            #print("setting density_matrix data...")
             self.set()
             
         if(AdjustBins):
@@ -483,7 +483,7 @@ class density_matrix:
     
     def bins(self, BinNum=100, AdjustBins=False):
         if len(self.data)==0:    
-            print("setting density_matrix data...")
+            #print("setting density_matrix data...")
             self.set() 
         n=BinNum
         if(AdjustBins):
@@ -651,6 +651,7 @@ def data_saver(name, N=1000):
     df = data_order(data_generator())
     for i in range(N-1):
         df=pd.concat((df, data_order(data_generator())))
+        print(f'Successfuly simulated {i+1} of {N} samples')
     
     df = df.reset_index().drop('index', axis=1)    
     df.transpose().to_csv(name, index=True)
