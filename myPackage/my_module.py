@@ -170,8 +170,7 @@ def matrix_fidelity(matrixA, matrixB):
         matrixB = matrixB.matrix
 
     if np.isnan(sqrtm(matrixA)).any():
-        print(matrixA, matrixB)
-        raise ValueError('Matrices do not have square roots')
+        print('Faulty Matrices:', matrixA, matrixB)
     
     fid = min(np.real(np.trace(sqrtm(sqrtm(matrixA)@matrixB@sqrtm(matrixA))))**2,1)
     
