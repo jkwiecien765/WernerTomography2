@@ -168,8 +168,14 @@ def matrix_fidelity(matrixA, matrixB):
         matrixA = matrixA.matrix
     if(type(matrixB) == density_matrix):
         matrixB = matrixB.matrix
+
+    if np.isnan(sqrtm(matrixA)).any():
+        print(matrixA, matrixB)
+        raise ValueError('Matrices do not have square roots')
     
     fid = min(np.real(np.trace(sqrtm(sqrtm(matrixA)@matrixB@sqrtm(matrixA))))**2,1)
+    
+
     
     return fid
 
