@@ -290,10 +290,10 @@ def vis_optimizer_dm(dm2, dm1, plot=False, N=200, printing=True):
     if(mf < 0.25):
         vis = 0.0
     else:
-        vis = 4/3 * (mf - 1/4)
+        vis = 1.3333333333333333333 * (mf - 0.25)
     if printing:
         print(f'Optimal visibility: {vis}')
-    opt_matrix=dm1*vis+(1-vis)*density_matrix(np.diag([0.25,0.25,0.25,0.25]))
+    opt_matrix=dm1*vis+(1.0-vis)*density_matrix(np.diag([0.25,0.25,0.25,0.25]))
 
     mf=matrix_fidelity(dm2, opt_matrix)
     dist=Frobenius_dist(dm2, opt_matrix)
@@ -424,16 +424,24 @@ class density_matrix:
         return(density_matrix(self.matrix+density_matrix2.matrix))
     
     def __mul__(self, num):
-        if isinstance(num, float):
-            return(density_matrix(num*self.matrix))
-        else:
-            raise TypeError("You must multiply by a float")
+        if not isinstance(num, float):
+            try:
+                num = float(num)
+            except:
+                raise TypeError("You must multiply by a float")
+            
+        return(density_matrix(num*self.matrix))
+            
 
     def __rmul__(self, num):
-        if isinstance(num, float):
-            return(density_matrix(num*self.matrix))
-        else:
-            raise TypeError("You must multiply by a float")
+        if not isinstance(num, float):
+            try:
+                num = float(num)
+            except:
+                raise TypeError("You must multiply by a float")
+            
+        return(density_matrix(num*self.matrix))
+    
     
     def set(self,N=50000, start=0):
         self.data=[]
