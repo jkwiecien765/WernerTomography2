@@ -230,52 +230,6 @@ def Frobenius_dist(A, B):
     dist=np.sqrt(np.real(np.trace(np.transpose(np.conjugate(D))@D)))
     return dist
     
-    
-#Optimises visibility to match a state (given in bin counts)
-   
-def vis_optimizer(binsIn, matrix, plot=False, frob=False):
-    '''Optimises a state's (2nd argument) visibility with respect to experimental data in bins (or density_matrix or simple 4x4 ndarray)'''
-    
-    if(frob and type(binsIn)==np.ndarray):
-        if(binsIn.shape!=(4,4)):
-            raise TypeError('If you want Frobenius distance input must be 4x4 ndarray or density_matrix')
-            
-    if(type(binsIn) == density_matrix):
-        matrixIn=binsIn.matrix
-        binsIn = binsIn.bins()['counts']
-    elif(np.shape(binsIn) == (4,4)):
-        matrixIn=binsIn
-        binsIn = density_matrix(binsIn).bins()['counts']
-            
-    fid = classical_fidelity(binsIn, matrix.bins()['counts'])
-    if frob:
-        dist=Frobenius_dist(matrixIn, matrix)
-        print(f'Initial distance {dist}')
-        
-    print(f'Initial fidelity: {fid}')
-    if(fid < 0.25):
-        vis = 0
-    else:
-        vis = 4/3 * (fid - 1/4)
-    print(f'Optimal visibility: {vis}')
-    opt_matrix=matrix*vis+(1-vis)*density_matrix(np.diag([0.25,0.25,0.25,0.25]))
-    
-    if frob:
-        fid=classical_fidelity(binsIn, opt_matrix.bins()['counts'])
-        qf=matrix_fidelity(matrixIn, opt_matrix)
-        print(f'Final classical fidelity: {fid}')
-        print(f'Quantum fidelity: {qf}')
-        dist=Frobenius_dist(matrixIn, opt_matrix)
-        print(f'Final distance: {dist}')
-        th_dist=np.sqrt(1 - 4/3 * qf * qf + 2/3 * qf - 1/3)
-        print(f'Theoretically predicted distance: {th_dist}')
-        
-    if(plot):
-        plt.stairs(binsIn, np.linspace(0, 1, len(binsIn)+1), fill=True)
-        plt.hist(opt_matrix.data,bins=len(binsIn), density=True)
-        plt.show
-    
-    return opt_matrix
 
 
 def vis_optimizer_dm(dm2, dm1, plot=False, N=200, printing=True):
