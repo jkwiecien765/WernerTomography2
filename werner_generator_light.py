@@ -64,8 +64,8 @@ def rotate_matrix(matrix, paramsA, paramsB):
 def obs(rho,parA = [-1,0,0], parB = [-1,0,0]):
     '''Simulation of observation of density matrix with unitary matrices of given parameters (defaults to random) 
         returns probability of observation as being in 00 state'''
-    parA = rand_phase() if (parA == [-1,0,0]).all() else parA
-    parB = rand_phase() if (parB == [-1,0,0]).all() else parB
+    parA = rand_phase() if parA[0]==-1 else parA
+    parB = rand_phase() if parB[0]==-1 else parB
     uA = unitary_mat2(parA)
     uB = unitary_mat2(parB)    
     u=tens_prod2d(uA,uB)
