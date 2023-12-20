@@ -1,25 +1,8 @@
-# Functions for Werner app
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
 from collections.abc import Iterable
 from scipy.linalg import sqrtm
 from numpy import pi
-from .__init__ import parameters
-
-
-np.set_printoptions(precision=5,suppress=True)
-     
-
-
-def chop(expr, max=1e-15):
-    
-    expr = np.asarray(expr) if type(expr)==np.matrix else expr
-    if issubclass(type(expr), Iterable):
-        return [chop(i) for i in expr]
-    else:
-        return (expr if expr**2 > max**2 else 0.0)
-    
 
 #Statevectors 1 and 2 qubit
 Zero=np.array([0,1])
@@ -32,11 +15,7 @@ OneOne=np.array([1,0,0,0])
 #Pauli matrices
 Pauli = (np.array([[1,0],[0,1]], dtype=complex), np.array([[0,1],[1,0]], dtype = complex), 
          np.array([[0, 0+1j],[0-1j, 0]], dtype= complex), np.array([[1,0],[0,-1]], dtype=complex))
-#Antidiagonal identity matrix
-F = np.array([[0,0,0,1],
-                [0,0,1,0],
-                [0,1,0,0],
-                [1,0,0,0]])
+
 
 #Tensor product which doesn't contain nested list in output
 def tens_prod2d(u1,u2):
@@ -57,20 +36,7 @@ def unitary_mat2(params):
                     [-np.exp(-1j* beta)*np.sin(th),np.exp(-1j* alpha)*np.cos(th)]])
     return u1
 
-def unitary_mat3(L=2):
-    #mat=np.zeros((4,4))
-    
-    mat=np.random.normal(size=(L,L,2)).view(np.complex128).reshape(L,L,)
-    mat2=mat.copy()
-    for i in range(L):
-            for j in range(i):
-                mat2[i] -= mat2[j] * np.inner(np.conjugate(mat2[j]), mat[i]) / np.inner(np.conjugate(mat2[j]), mat2[j])
-            print(mat2[i], end=' ')
-            mat2[i] /= np.sqrt(np.real(np.inner(np.conjugate(mat2[i]), mat2[i])))
-            print(mat2[i])
-    return np.array(mat2)
 
-#Density matrix of Werner state and its generalisation
 def rho2(th, vis):
     '''returns 4x4 ndarray matrix of Werner state
     first argument is angle of sine in the formula, second is the visibility'''
@@ -85,16 +51,8 @@ def rand_phase():
     r=[np.arcsin(np.sqrt(np.random.rand())),np.random.rand()*2*pi,np.random.rand()*2*pi]
     return r
 
-parameters=[]
-for i in range(1000000):
-    parameters.append([rand_phase(),rand_phase()])
-    
-def aT(matrix):
-    '''Transposes a 4D matrix over its antidiagonal '''
-    matrix = F@matrix.T@F
-    return matrix 
 
-
+parameters=np.load('parameters.npy')
 
 def rotate_matrix(matrix, paramsA, paramsB):
     matrix = matrix.matrix if type(matrix) == density_matrix else matrix
@@ -152,14 +110,6 @@ def classical_fidelity3(dmA, dmB):
     fid = np.power(np.sqrt(arrA[:Len]*arrB[:Len]).sum(), 2)
     return fid
 
-def double_plot(dmA, dmB, show_fidelity=False):
-    binsA = dmA.bins()
-    binsB = dmB.bins()
-    plt.stairs(binsA['counts'], binsA['bins'], fill=True)
-    plt.stairs(binsB['counts'], binsB['bins'])
-    if show_fidelity:
-        mins = classical_fidelity2(dmA, dmB)[1]
-        plt.stairs(mins, binsB['bins'], color = 'black')
 
 def matrix_fidelity(matrixA, matrixB):
     '''Calculates matrix fidelity given two ndarrays of matrices (or density_matrices)'''
@@ -168,13 +118,8 @@ def matrix_fidelity(matrixA, matrixB):
         matrixA = matrixA.matrix
     if(type(matrixB) == density_matrix):
         matrixB = matrixB.matrix
-
-    if np.isnan(sqrtm(matrixA)).any():
-        print('Faulty Matrices:', matrixA, matrixB)
     
     fid = min(np.real(np.trace(sqrtm(sqrtm(matrixA)@matrixB@sqrtm(matrixA))))**2,1)
-    
-
     
     return fid
 
@@ -190,41 +135,6 @@ def optimal_matrix_fidelity(dmA):
     res = differential_evolution(f, args=(dmA,), bounds=bounds)
     return {'value': -res['fun'], 'angle': res['x'][-1], 'parameters': [res['x'][:3].tolist(), res['x'][3:6].tolist()]}
 
-def optimal_matrix_fidelity_vis(dmA):
-    from scipy.optimize import differential_evolution
-    def f(params, matrixA):
-        matrixA = matrixA.matrix if type(matrixA) == density_matrix else matrixA    #inspected matrix
-        matrixB = rho2(params[-2], params[-1])
-        paramsA = params[:3]
-        paramsB = params[3:6]
-        return Frobenius_dist(rotate_matrix(matrixB, paramsA, paramsB), matrixA)
-    bounds = [(0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0, pi), (0,1)]
-    res = differential_evolution(f, args=(dmA,), bounds=bounds)
-    return {'distance': res['fun'], 'angle': res['x'][-2], 'visibility': res['x'][-1], 'parameters': [res['x'][:3].tolist(),res['x'][3:6].tolist()]}
-
-def optimal_matrix_rotation(dmA, dmB):
-    from scipy.optimize import differential_evolution
-    def f(params, matrixA, matrixB):
-        matrixA = matrixA.matrix if type(matrixA) == density_matrix else matrixA
-        matrixB = matrixB.matrix if type(matrixB) == density_matrix else matrixB
-        paramsA = params[:3]
-        paramsB = params[3:]
-        return -1*matrix_fidelity(rotate_matrix(matrixA, paramsA, paramsB), matrixB)
-    res = differential_evolution(f, args=(dmA, dmB), bounds=[(0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi)])
-    return {'value': -res['fun'], 'parameters': [res['x'][:3],res['x'][3:]]}
-
-def compare_fid(dmA, dmB, show_fidelity = False):
-    print(f'Matrix fidelity {matrix_fidelity(dmA, dmB):.4f}, \n optimal matrix fidelity: {optimal_matrix_fidelity(dmA, dmB)["value"]:.4f}, \n geometrical classical fidelity {classical_fidelity2(dmA, dmB)[0]:.4f}, \n statistical bin classical fidelity {classical_fidelity(dmA, dmB):.4f}, \n statistical point classical fidelity {classical_fidelity3(dmA, dmB):.4f}')
-    binsA = dmA.bins()
-    binsB = dmB.bins()
-    plt.stairs(binsA['counts'], binsA['bins'], fill=True)
-    plt.stairs(binsB['counts'], binsB['bins'])
-    if show_fidelity:
-        mins = classical_fidelity2(dmA, dmB)[1]
-        plt.stairs(mins, binsB['bins'], color = 'black')
-    plt.show()
-
-
 
 def Frobenius_dist(A, B):
     '''Frobenius distance of two states. Input must me two 4x4 matrices or density_matrices'''
@@ -234,7 +144,6 @@ def Frobenius_dist(A, B):
     D=A-B
     dist=np.sqrt(np.real(np.trace(np.transpose(np.conjugate(D))@D)))
     return dist
-    
 
 
 def vis_optimizer_dm(dm2, dm1, plot=False, N=200, printing=True):
@@ -283,59 +192,7 @@ def rand_PSDM():
         raise Exception('Fail: tr!=1')
     
     return PSDM
-        
-def mean_over_unitars(matrix, N=100000, recording=False):
-    '''Takes a matrix or 4x4 list/ndarray and translates it N times over unitary matrices. If recording=True, it returns also a pandas.DataFrame with each iteration of the loop'''
-    matrix=np.array(matrix)
-    record=pd.DataFrame()
-    for param in parameters[0:N]:
-        if recording:
-            ser=pd.Series(np.append(np.asarray(matrix).flatten(), np.trace(matrix))).to_frame().T
-            record=pd.concat([record, ser])    
-        uA=np.array(unitary_mat2(param[0]))
-        uB=np.array(unitary_mat2(param[1]))
-        u=tens_prod2d(uA,uB)
-        matrix = u@matrix@(np.transpose(np.conjugate(u)))
-        matrix = np.real(matrix)
-        #matrix /= np.trace(matrix)
-    if recording:
-        record.reset_index(inplace=True)
-        record.drop('index', axis=1, inplace=True)
-        record.rename({k: str(k) for k in range(16)}, axis=1, inplace=True)
-        record.rename({16: 'Trace'}, axis=1, inplace=True)            
-        return matrix, record
-    else:
-        return matrix    
 
-def mean_over_unitars2(initial_matrix, N=100000, recording=False):
-    '''Takes a matrix or 4x4 list/ndarray and takes average of N translations over unitary matrices. If recording=True, it returns also a pandas.DataFrame with each iteration of the loop'''
-    initial_matrix = np.array(initial_matrix)
-    final_matrix = np.array(np.zeros([4,4]))
-    record = pd.DataFrame()
-    matrix=final_matrix
-    ser=pd.Series(np.asarray(matrix).flatten()).to_frame().T
-    record=pd.concat([record, ser])
-    
-    for param in parameters[0:N]:
-        
-                
-        uA=np.array(unitary_mat2(param[0]))
-        uB=np.array(unitary_mat2(param[1]))
-        u=tens_prod2d(uA,uB)
-        final_matrix += np.real(u@initial_matrix@(np.transpose(np.conjugate(u)))/N)
-        if recording:
-            matrix=final_matrix*N/len(record)
-            ser=pd.Series(np.asarray(matrix).flatten()).to_frame().T
-            record=pd.concat([record, ser])
-        #matrix /= np.trace(matrix)
-    if recording:
-        record.reset_index(inplace=True)
-        record.drop('index', axis=1, inplace=True)
-        record.rename({k: str(k) for k in range(16)}, axis=1, inplace=True)
-        record.rename({16: 'Trace'}, axis=1, inplace=True)            
-        return final_matrix, record
-    else:
-        return final_matrix   
 
 '''MEASURES'''
 
@@ -413,29 +270,14 @@ class density_matrix:
         
     desc=""
     is_Werner=False
-    num_of_compounds=np.nan
     Werner_angle=[]
     weights=[]
-    visibility=np.nan
     data=[]
     name=''
     
-    def aT(self):
-        return density_matrix(aT(self.matrix))    
-     
-    def T(self):
-        return density_matrix(self.matrix.T)    
     
     def Ur(self, paramsA, paramsB):
         return density_matrix(rotate_matrix(self.matrix, paramsA, paramsB))
-    
-    def range(self):
-        if len(self.data)==0:    
-            #print("setting density_matrix data...")
-            self.set() 
-        mi=np.round(min(self.data),3)
-        ma=np.round(max(self.data),3)
-        return(mi, ma)
     
     def histogram(self, BinNum=100, AdjustBins=False):
         if len(self.data)==0:    
@@ -472,75 +314,6 @@ class density_matrix:
             "bins" : bins
         }
         return Bins
-    
-    def curve(self):
-        Bins=self.bins()
-        counts=Bins['counts']
-        bins=Bins['bins'][1:]
-        counts2=counts[:2]
-        for idx in range(len(counts)-6):
-            count=counts[idx+3]
-            count2=0
-            denum=0
-            for delta in range(7):
-                if count/counts[idx+delta]<2 and count/counts[idx+delta]>0.5:
-                    denum+=1
-                    count2+=counts[idx+delta]
-            if count2>0:
-                count2/=denum 
-            counts2=np.append(counts2,count2)
-        for el in counts[-4:]:
-            counts2=np.append(counts2,el)
-        plt.plot(bins,counts2)
-        return
-
-
-def hist_convolution(binsf,binsg):
-    if(len(binsf)!=len(binsg)):
-        raise ValueError("Unmatched bins set! (different lengths)")
-    l=len(binsf)
-    conv_bins=[]
-    for i in range(l):
-        conv=0
-        for j in range(i+1):
-            conv+=binsf[i-j]*binsg[j]*l
-        conv_bins.append(conv)
-    return conv_bins 
-
-
-"""Calculate the Brues distance.
-Input: two density matrices (array form)
-Output: Mean distance: float [0,1]"""
-def loss_function(dms1, dms2):
-    loss=0
-    for i in range(len(dms1)):
-        dm1=dms1[i]
-        dm2=dms2[i]
-        fidelity=min(np.trace(sqrtm(dm1)@dm2@sqrtm(dm1))**2,1)
-        loss+=2-2*np.sqrt(fidelity)
-    return loss
-
-
-def bins2curve(Bins):
-    counts=Bins['counts']
-    bins=Bins['bins'][1:]
-    counts2=counts[:2]
-    for idx in range(len(counts)-6):
-        count=counts[idx+3]
-        count2=0
-        denum=0
-        for delta in range(7):
-            if count/counts[idx+delta]<2 and count/counts[idx+delta]>0.5:
-                denum+=1
-                count2+=counts[idx+delta]
-        if count2>0:
-            count2/=denum 
-        counts2=np.append(counts2,count2)
-    for el in counts[-4:]:
-        counts2=np.append(counts2,el)
-    plt.plot(bins,counts2)
-    return
-    
 
 '''Data generation and pre-processing'''
 
@@ -636,3 +409,6 @@ def data_reader(directory='dataJK'):
         temp = pd.read_csv(directory+'/'+file, index_col=['Category', 'Index']).transpose()
         df = pd.concat((df,temp))
     return df.reset_index().drop('index', axis=1)
+
+
+data_save_iterator(N=2, n=1, Prefix='Test')
