@@ -152,7 +152,7 @@ def Frobenius_dist(A, B):
     return dist
 
 
-def vis_optimizer_dm(dm2, dm1, plot=False, N=200, printing=True):
+def vis_optimizer_dm(dm2, dm1, printing=True):
     '''Optimises a state's (2nd argument) visibility with respect to experimental data in bins (or density_matrix or simple 4x4 ndarray)'''
     mf=matrix_fidelity(dm2, dm1)
 
@@ -175,14 +175,6 @@ def vis_optimizer_dm(dm2, dm1, plot=False, N=200, printing=True):
         print(f'Final matrix fidelity: {mf}')
         print(f'Final distance: {dist}')
         
-    if(plot):
-        plt.hist(dm2.data,bins=N,density=True)
-        #plt.hist(dm1.data,bins=N, density=True, histtype='step')
-        if(opt_matrix.data == []): 
-            opt_matrix.set()
-        plt.hist(opt_matrix.data, bins=N, histtype='step', density = True)
-        plt.show()
-    
     return opt_matrix, vis
 
 
@@ -285,16 +277,7 @@ class density_matrix:
     def Ur(self, paramsA, paramsB):
         return density_matrix(rotate_matrix(self.matrix, paramsA, paramsB))
     
-    def histogram(self, BinNum=100, AdjustBins=False):
-        if len(self.data)==0:    
-            #print("setting density_matrix data...")
-            self.set()
-            
-        if(AdjustBins):
-            ran=max(self.range()[1]-self.range()[0],0.001)
-            plt.hist(self.data,int(BinNum/ran),range=(0,1),density=True)
-        else:
-            plt.hist(self.data,BinNum,range=(0,1),density=True)
+
     
     def bins(self, BinNum=100, AdjustBins=False):
         if len(self.data)==0:    
