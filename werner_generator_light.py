@@ -3,6 +3,7 @@ import pandas as pd
 from collections.abc import Iterable
 from scipy.linalg import sqrtm
 from numpy import pi
+import time
 
 #Parameters for data_save_iterator function
 N=10000
@@ -382,8 +383,10 @@ def data_order(dictionary):
 def data_saver(name, N=1000):
     df = data_order(data_generator())
     for i in range(N-1):
+        t0=time.time()
         df=pd.concat((df, data_order(data_generator())))
-        print(f'Successfuly simulated {i+1} of {N} samples')
+        deltat = time.time() - t0
+        print(f'Successfuly simulated {i+1} of {N} samples. Time elapsed: {deltat:.2}')
     
     df = df.reset_index().drop('index', axis=1)    
     df.transpose().to_csv(name, index=True)
@@ -399,7 +402,10 @@ def data_save_iterator(N=None, n=None, Prefix=None):
     if(Prefix==None):
         Prefix=input('Enter prefix for files producet by the program:')
     for i in range(N):
+        t0 = time.time()
         data_saver('dataJK/'+Prefix+'data'+str(i)+'.csv', n)
+        deltat = time.time() - t0 
+        print(f'File {i+1} of {N} saved. Total time: {deltat:.2}')
     
 
 def data_reader(directory='dataJK'):
