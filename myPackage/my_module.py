@@ -169,12 +169,12 @@ def matrix_fidelity(matrixA, matrixB):
     if(type(matrixB) == density_matrix):
         matrixB = matrixB.matrix
 
-    if np.isnan(sqrtm(matrixA)).any():
+    sqr = sqrtm(matrixA)
+    if np.isnan(sqr).any():
         print('Faulty Matrices:', matrixA, matrixB)
+        return np.nan
     
-    fid = min(np.real(np.trace(sqrtm(sqrtm(matrixA)@matrixB@sqrtm(matrixA))))**2,1)
-    
-
+    fid = min(np.real(np.trace(sqrtm(sqr@matrixB@sqr)))**2,1)
     
     return fid
 
@@ -185,7 +185,8 @@ def optimal_matrix_fidelity(dmA):
         matrixB = rho2(params[-1], 1)
         paramsA = params[:3]
         paramsB = params[3:-1]
-        return -1*matrix_fidelity(rotate_matrix(matrixB, paramsA, paramsB), matrixA)
+        
+        return -1*matrix_fidelity(matrixA,rotate_matrix(matrixB, paramsA, paramsB))
     bounds = [(0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0, pi/4)]
     res = differential_evolution(f, args=(dmA,), bounds=bounds)
     return {'value': -res['fun'], 'angle': res['x'][-1], 'parameters': [res['x'][:3].tolist(), res['x'][3:6].tolist()]}
@@ -547,7 +548,10 @@ def bins2curve(Bins):
 def data_generator(dm=None):
     dm = density_matrix(rand_PSDM()) if dm==None else dm
     dm.name = 'rand_PSDM'
-    ans = optimal_matrix_fidelity(dm)
+    try:
+        ans = optimal_matrix_fidelity(dm)
+    except:
+        return {}
     angle = ans['angle']
     rotation = ans['parameters']
     opt_matrix, vis = vis_optimizer_dm(dm, density_matrix(rotate_matrix(rho2(angle, 1), rotation[0], rotation[1])), printing = False)

@@ -4,6 +4,11 @@ from collections.abc import Iterable
 from scipy.linalg import sqrtm
 from numpy import pi
 
+#Parameters for data_save_iterator function
+n=1
+N=1
+Prefix = 'ThirdTest'
+
 #Statevectors 1 and 2 qubit
 Zero=np.array([0,1])
 One=np.array([1,0])
@@ -130,7 +135,8 @@ def optimal_matrix_fidelity(dmA):
         matrixB = rho2(params[-1], 1)
         paramsA = params[:3]
         paramsB = params[3:-1]
-        return -1*matrix_fidelity(rotate_matrix(matrixB, paramsA, paramsB), matrixA)
+      
+        return -1*matrix_fidelity(matrixA, rotate_matrix(matrixB, paramsA, paramsB))
     bounds = [(0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0, pi/4)]
     res = differential_evolution(f, args=(dmA,), bounds=bounds)
     return {'value': -res['fun'], 'angle': res['x'][-1], 'parameters': [res['x'][:3].tolist(), res['x'][3:6].tolist()]}
@@ -320,7 +326,10 @@ class density_matrix:
 def data_generator(dm=None):
     dm = density_matrix(rand_PSDM()) if dm==None else dm
     dm.name = 'rand_PSDM'
-    ans = optimal_matrix_fidelity(dm)
+    try:
+        ans = optimal_matrix_fidelity(dm)
+    except:
+        return {}
     angle = ans['angle']
     rotation = ans['parameters']
     opt_matrix, vis = vis_optimizer_dm(dm, density_matrix(rotate_matrix(rho2(angle, 1), rotation[0], rotation[1])), printing = False)
@@ -411,4 +420,4 @@ def data_reader(directory='dataJK'):
     return df.reset_index().drop('index', axis=1)
 
 
-data_save_iterator(N=2, n=1, Prefix='Test')
+data_save_iterator(N=N, n=n, Prefix=Prefix)
