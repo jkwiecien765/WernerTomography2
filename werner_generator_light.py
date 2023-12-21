@@ -5,9 +5,9 @@ from scipy.linalg import sqrtm
 from numpy import pi
 
 #Parameters for data_save_iterator function
-n=1
-N=1
-Prefix = 'ThirdTest'
+N=10000
+n=300
+Prefix = None
 
 #Statevectors 1 and 2 qubit
 Zero=np.array([0,1])
@@ -407,9 +407,17 @@ def data_saver(name, N=1000):
     df = pd.read_csv(name)
     df = df.set_index(['Category', 'Index']).transpose()
     
-def data_save_iterator(N=1000, n=1000, Prefix=''):
+def data_save_iterator(N=None, n=None, Prefix=None):
+    
+    if(N==None):
+        N=int(input('Enter number of files to produce (N):'))
+    if(n==None):
+        n=int(input('Enter number of samples in each file (n):'))
+    if(Prefix==None):
+        Prefix=input('Enter prefix for files producet by the program:')
     for i in range(N):
         data_saver('dataJK/'+Prefix+'data'+str(i)+'.csv', n)
+    
 
 def data_reader(directory='dataJK'):
     import os
