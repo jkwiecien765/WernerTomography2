@@ -152,15 +152,19 @@ def classical_fidelity3(dmA, dmB):
     fid = np.power(np.sqrt(arrA[:Len]*arrB[:Len]).sum(), 2)
     return fid
 
-def double_plot(dmA, dmB, show_fidelity=False):
-    binsA = dmA.bins()
-    binsB = dmB.bins()
-    plt.stairs(binsA['counts'], binsA['bins'], fill=True)
-    plt.stairs(binsB['counts'], binsB['bins'])
-    if show_fidelity:
-        mins = classical_fidelity2(dmA, dmB)[1]
-        plt.stairs(mins, binsB['bins'], color = 'black')
-
+def double_plot(dmA, dmB):
+    if type(dmA)==density_matrix:
+        binsA = dmA.bins()['counts']
+    else:
+        binsA = dmA
+    if type(dmB)==density_matrix:
+        binsB = dmB.bins()['counts']
+    else:
+        binsB = dmB
+    bins = np.linspace(0,1,101)
+    plt.stairs(binsA, bins, fill=True)
+    plt.stairs(binsB, bins)
+    
 def matrix_fidelity(matrixA, matrixB):
     '''Calculates matrix fidelity given two ndarrays of matrices (or density_matrices)'''
 
@@ -272,18 +276,47 @@ def vis_optimizer_dm(dm2, dm1, plot=False, N=200, printing=True):
     return opt_matrix, vis
 
 
-def rand_PSDM():
-    '''Generates a 4x4 matrix of a Positive Semi-definite matrix with trace 1'''
-    mat=np.array(np.random.rand(4,4))
-    # Any matrix that is product of B.BT where B is a real-valued invertible matriix is PSDM 
-    PSDM = np.matmul(mat,np.transpose(mat))
-    PSDM /= np.trace(PSDM)
-    
-    if(abs(1-np.trace(PSDM))>1e-7):
-        print(np.trace(PSDM))
-        raise Exception('Fail: tr!=1')
-    
-    return PSDM
+#Copied from qiskit
+def _ginibre_matrix(nrow, ncol, seed=None):
+    """Return a normally distributed complex random matrix.
+
+    Args:
+        nrow (int): number of rows in output matrix.
+        ncol (int): number of columns in output matrix.
+        seed(int or np.random.Generator): default rng.
+
+    Returns:
+        ndarray: A complex rectangular matrix where each real and imaginary
+            entry is sampled from the normal distribution.
+    """
+    if seed is None:
+        rng = np.random.default_rng()
+    elif isinstance(seed, np.random.Generator):
+        rng = seed
+    else:
+        rng = np.random.default_rng(seed)
+
+    ginibre = rng.normal(
+        size=(nrow, ncol)) + rng.normal(size=(nrow, ncol)) * 1j
+    return ginibre
+
+#Copied from qiskit
+def rand_PSDM(dim, seed=None):
+    """
+    Generate a random density matrix from the Hilbert-Schmidt metric.
+
+    Args:
+        dim (int): the dimensions of the density matrix.
+        rank (int or None): the rank of the density matrix. The default
+            value is full-rank.
+        seed (int or np.random.Generator): default rng.
+
+    Returns:
+        ndarray: rho (N,N)  a density matrix.
+    """
+    mat = _ginibre_matrix(dim, dim, seed)
+    mat = mat.dot(mat.conj().T)
+    return mat / np.trace(mat)
         
 def mean_over_unitars(matrix, N=100000, recording=False):
     '''Takes a matrix or 4x4 list/ndarray and translates it N times over unitary matrices. If recording=True, it returns also a pandas.DataFrame with each iteration of the loop'''
@@ -552,12 +585,13 @@ def data_generator(dm=None):
         ans = optimal_matrix_fidelity(dm)
     except:
         return {}
-    angle = ans['angle']
-    rotation = ans['parameters']
+    angle = np.real(ans['angle'])
+    rotation = np.real(ans['parameters'])
     opt_matrix, vis = vis_optimizer_dm(dm, density_matrix(rotate_matrix(rho2(angle, 1), rotation[0], rotation[1])), printing = False)
+    vis = np.real(vis)
     opt_matrix.name = 'angle=' + str(angle) + ', vis=' + str(vis)
-    opt_matrix.matrix = opt_matrix.matrix/np.trace(opt_matrix.matrix)
-    hist = dm.bins()['counts'].tolist()
+    opt_matrix.matrix = np.real(opt_matrix.matrix/np.trace(opt_matrix.matrix))
+    hist = np.real(dm.bins()['counts']).tolist()
     
     return {'Matrix': dm.matrix.tolist(), 'Bins': hist, 'Angle': angle, 'Visibility': vis, 'Rotation': rotation,
             'Distance': Frobenius_dist(dm, opt_matrix), 'MatrixFidelity': matrix_fidelity(dm, opt_matrix),
@@ -640,3 +674,69 @@ def data_reader(directory='dataJK'):
         temp = pd.read_csv(directory+'/'+file, index_col=['Category', 'Index']).transpose()
         df = pd.concat((df,temp))
     return df.reset_index().drop('index', axis=1)
+
+class samples():
+    def __init__(self, df=None):
+        if(df==None):
+            self.Bins = pd.DataFrame()
+            self.Matrix = pd.DataFrame()
+            self.OptimalState = pd.DataFrame()
+            self.Measures = pd.DataFrame()
+            self.Rotation = pd.DataFrame()
+        else:
+            self.Bins = df.Bins
+            self.Matrix = df.Matrix
+            self.OptimalState = df.OptimalState
+            self.Measures = df.Measures
+            self.Rotation = df.Rotation
+    
+    def save(self, destination):
+        self.Bins.to_csv(destination+'Bins.csv', index_label='Index')
+        self.Matrix.to_csv(destination+'Matrix.csv', index_label='Index')
+        self.OptimalState.to_csv(destination+'OptimalState.csv', index_label='Index')
+        self.Measures.to_csv(destination+'Measures.csv', index_label='Index')
+        self.Rotation.to_csv(destination+'Rotation.csv', index_label='Index')
+    
+    def read(self, destination):
+        self.Bins = pd.read_csv(destination+'Bins.csv', index_col='Index')
+        self.Matrix = pd.read_csv(destination+'Matrix.csv',index_col='Index')
+        self.OptimalState = pd.read_csv(destination+'OptimalState.csv', index_col='Index')
+        self.Measures = pd.read_csv(destination+'Measures.csv', index_col='Index')
+        self.Rotation = pd.read_csv(destination+'Rotation.csv', index_col='Index')
+        self.Matrix.values = np.comp
+    
+    def histogram(self, index):
+        if(type(index)==int):
+            plt.stairs(self.Bins.iloc[index].values)
+        else:
+            plt.stairs(self.Bins.loc[index].transpose().values.flatten())
+
+    def opt_histogram(self, index):
+        if(type(index)==int):
+            density_matrix(rho2(self.OptimalState.loc[index].Angle, self.OptimalState.loc[index].Visibility)).histogram()            
+        else:
+            density_matrix(rho2(self.OptimalState.loc[index].Angle.values, self.OptimalState.loc[index].Visibility.values)).histogram()
+
+    def double_plot(self, index):
+        if(type(index)==int):
+            double_plot(density_matrix(rho2(self.OptimalState.loc[index].Angle, self.OptimalState.loc[index].Visibility)),
+                self.Bins.iloc[index].values)
+        else:
+            double_plot(density_matrix(rho2(self.OptimalState.loc[index].Angle.values, self.OptimalState.loc[index].Visibility.values)),
+                        self.Bins.loc[index].transpose().values.reshape(-1,100))
+
+
+       
+        
+def load_samples(destination):
+    samps = samples()
+    samps.Bins = pd.read_csv(destination+'Bins.csv', index_col='Index')
+    samps.Matrix = pd.read_csv(destination+'Matrix.csv',index_col='Index')
+    samps.OptimalState = pd.read_csv(destination+'OptimalState.csv', index_col='Index')
+    samps.Measures = pd.read_csv(destination+'Measures.csv', index_col='Index')
+    samps.Rotation = pd.read_csv(destination+'Rotation.csv', index_col='Index')
+    return samps
+
+
+
+        

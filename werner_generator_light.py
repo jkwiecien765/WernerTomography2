@@ -6,8 +6,8 @@ from numpy import pi
 import time
 
 #Parameters for data_save_iterator function
-N=10000
-n=100
+N=None
+n=None
 Prefix = None
 
 #Statevectors 1 and 2 qubit
@@ -179,19 +179,47 @@ def vis_optimizer_dm(dm2, dm1, printing=True):
     return opt_matrix, vis
 
 
-def rand_PSDM():
-    '''Generates a 4x4 matrix of a Positive Semi-definite matrix with trace 1'''
-    mat=np.array(np.random.rand(4,4))
-    # Any matrix that is product of B.BT where B is a real-valued invertible matriix is PSDM 
-    PSDM = np.matmul(mat,np.transpose(mat))
-    PSDM /= np.trace(PSDM)
-    
-    if(abs(1-np.trace(PSDM))>1e-7):
-        print(np.trace(PSDM))
-        raise Exception('Fail: tr!=1')
-    
-    return PSDM
+#Copied from qiskit
+def _ginibre_matrix(nrow, ncol, seed=None):
+    """Return a normally distributed complex random matrix.
 
+    Args:
+        nrow (int): number of rows in output matrix.
+        ncol (int): number of columns in output matrix.
+        seed(int or np.random.Generator): default rng.
+
+    Returns:
+        ndarray: A complex rectangular matrix where each real and imaginary
+            entry is sampled from the normal distribution.
+    """
+    if seed is None:
+        rng = np.random.default_rng()
+    elif isinstance(seed, np.random.Generator):
+        rng = seed
+    else:
+        rng = np.random.default_rng(seed)
+
+    ginibre = rng.normal(
+        size=(nrow, ncol)) + rng.normal(size=(nrow, ncol)) * 1j
+    return ginibre
+
+#Copied from qiskit
+def rand_PSDM(dim=4, seed=None):
+    """
+    Generate a random density matrix from the Hilbert-Schmidt metric.
+
+    Args:
+        dim (int): the dimensions of the density matrix.
+        rank (int or None): the rank of the density matrix. The default
+            value is full-rank.
+        seed (int or np.random.Generator): default rng.
+
+    Returns:
+        ndarray: rho (N,N)  a density matrix.
+    """
+    mat = _ginibre_matrix(dim, dim, seed)
+    mat = mat.dot(mat.conj().T)
+    return mat / np.trace(mat)
 
 '''MEASURES'''
 
@@ -314,85 +342,69 @@ def data_generator(dm=None):
         ans = optimal_matrix_fidelity(dm)
     except:
         return {}
-    angle = ans['angle']
-    rotation = ans['parameters']
+    angle = np.real(ans['angle'])
+    rotation = np.real(ans['parameters'])
     opt_matrix, vis = vis_optimizer_dm(dm, density_matrix(rotate_matrix(rho2(angle, 1), rotation[0], rotation[1])), printing = False)
     opt_matrix.name = 'angle=' + str(angle) + ', vis=' + str(vis)
     opt_matrix.matrix = opt_matrix.matrix/np.trace(opt_matrix.matrix)
-    hist = dm.bins()['counts'].tolist()
+    hist = np.real(dm.bins()['counts']).tolist()
     
-    return {'Matrix': dm.matrix.tolist(), 'Bins': hist, 'Angle': angle, 'Visibility': vis, 'Rotation': rotation,
-            'Distance': Frobenius_dist(dm, opt_matrix), 'MatrixFidelity': matrix_fidelity(dm, opt_matrix),
-            'HistogramFidelity': classical_fidelity(dm, opt_matrix), 'Covering': classical_fidelity2(dm, opt_matrix),
-            'ConcurrenceOriginal': concurrence(dm), 'ConcurrenceOpt': concurrence(opt_matrix), 
-            'CHSHViolationMOriginal': CHSHviolation_measure(dm), 'CHSHViolationMOpt': CHSHviolation_measure(opt_matrix)}
+    return {'Matrix': dm.matrix.tolist(), 'Bins': hist, 'Angle': angle, 'Visibility': np.real(vis), 'Rotation': rotation,
+            'Distance': np.real(Frobenius_dist(dm, opt_matrix)), 'MatrixFidelity': np.real(matrix_fidelity(dm, opt_matrix)),
+            'HistogramFidelity': np.real(classical_fidelity(dm, opt_matrix)), 'Covering': np.real(classical_fidelity2(dm, opt_matrix)),
+            'ConcurrenceOriginal': np.real(concurrence(dm)), 'ConcurrenceOpt': np.real(concurrence(opt_matrix)), 
+            'CHSHViolationMOriginal': np.real(CHSHviolation_measure(dm)), 'CHSHViolationMOpt': np.real(CHSHviolation_measure(opt_matrix))}
 
 def data_order(dictionary):
-    binsDF = pd.DataFrame(dictionary['Bins'])
     bins = np.linspace(0,1,101)
     bins2 = []
     for i in range(100):
         bins2.append('[' + str(round(bins[i],2)) + ', ' + str(round(bins[i+1],2)) + ']')
-    bins2 = pd.Series(bins2, name='Index')
-    bins3 = ['Bins']*100
-    bins3 = pd.Series(bins3, name='Category')
-    binsDF = pd.merge(binsDF, bins2, left_index=True, right_index=True)
-    binsDF = pd.merge(binsDF, bins3, left_index=True, right_index=True)
-    binsDF.set_index(['Category','Index'], inplace=True)
-    binsDF = binsDF.transpose()
+    binsDF = pd.DataFrame({0: dictionary['Bins'], 'Index': bins2}).set_index(['Index']).transpose()
+    binsDF = binsDF
+
     matrixList = []
     matrixIndex = []
-    matrixType = ['Matrix'] * 16
     for i in range(4):
         for j in range(4):
             matrixList.append(dictionary['Matrix'][i][j])
             matrixIndex.append(str(i)+','+str(j))
-    matrixDF = pd.DataFrame({'Index': matrixIndex, 0: matrixList, 'Category': matrixType})
-    matrixDF.set_index(['Category', 'Index'], inplace=True)
-    matrixDF = matrixDF.transpose()
-    allDF=pd.merge(binsDF, matrixDF, left_index=True, right_index=True)
+    matrixDF = pd.DataFrame({'Index': matrixIndex, 0: matrixList}).set_index(['Index']).transpose()
+    matrixDF = matrixDF
     
     rotationList = []
     rotationIndexl0 = []
-    rotationIndexl1 = ['Rotation']*6
     for i in range(2):
         for j in range(3):
             rotationList.append(dictionary['Rotation'][i][j])
             rotationIndexl0.append(3*i+j)
-    rotationDF = pd.DataFrame({'Category': rotationIndexl1, 'Index': rotationIndexl0, 0: rotationList})
-    rotationDF = rotationDF.set_index(['Category', 'Index']).transpose()
-    allDF = pd.merge(allDF, rotationDF, left_index=True, right_index=True)
-    
+    rotationDF = pd.DataFrame({'Index': rotationIndexl0, 0: rotationList}).set_index(['Index']).transpose()
+
     paramsList = [dictionary['Angle'], dictionary['Visibility']]
     paramsIndexl0= ['Angle', 'Visibility']
-    paramsIndexl1 = ['OptimalState']*2
-    paramsDF = pd.DataFrame({'Category': paramsIndexl1, 'Index': paramsIndexl0, 0: paramsList})
-    paramsDF = paramsDF.set_index(['Category', 'Index']).transpose()
-    allDF = pd.merge(allDF, paramsDF, left_index=True, right_index=True)
+    paramsDF = pd.DataFrame({'Index': paramsIndexl0, 0: paramsList}).set_index(['Index']).transpose()
     
-    measuresIndexl1 = ['Measures'] * 8
     measuresIndexl0 = ['Distance',  'MatrixFidelity', 'HistogramFidelity', 'Covering', 'ConcurrenceOriginal', 'ConcurrenceOpt', 'CHSHViolationMOriginal', 'CHSHViolationMOpt']
     measuresList = [dictionary[key] for key in measuresIndexl0]
-    measuresDF = pd.DataFrame({'Category': measuresIndexl1, 'Index': measuresIndexl0, 0: measuresList})
-    measuresDF = measuresDF.set_index(['Category', 'Index']).transpose()
-    allDF = pd.merge(allDF, measuresDF, left_index=True, right_index=True)    
+    measuresDF = pd.DataFrame({'Index': measuresIndexl0, 0: measuresList}).set_index(['Index']).transpose()
         
-    return allDF
+    return [binsDF, matrixDF, rotationDF, paramsDF, measuresDF]
 
 
-def data_saver(name, N=1000):
-    df = data_order(data_generator())
-    for i in range(N-1):
+def data_saver(name, n=1000):
+    
+    categories = ('Bins', 'Matrix','Rotation', 'OptimalState', 'Measures')     
+    dfs = data_order(data_generator())
+    for i in range(n-1):
         t0=time.time()
-        df=pd.concat((df, data_order(data_generator())))
+        for j, df in enumerate(data_order(data_generator())):
+            dfs[j] = pd.concat((dfs[j], df))
         deltat = time.time() - t0
-        print(f'Successfuly simulated {i+1} of {N} samples. Time elapsed: {deltat:.2f}')
-    
-    df = df.reset_index().drop('index', axis=1)    
-    df.transpose().to_csv(name, index=True)
-    df = pd.read_csv(name)
-    df = df.set_index(['Category', 'Index']).transpose()
-    
+        print(f'Successfuly simulated {i+1} of {n} samples. Time elapsed: {deltat:.2f}')
+    for i, df in enumerate(dfs):
+        df = df.reset_index(drop=True)    
+        df.to_csv(name+categories[i]+'.csv', index=True, index_label='Index')
+        
 def data_save_iterator(N=None, n=None, Prefix=None):
     
     if(N==None):
@@ -400,10 +412,10 @@ def data_save_iterator(N=None, n=None, Prefix=None):
     if(n==None):
         n=int(input('Enter number of samples in each file (n):'))
     if(Prefix==None):
-        Prefix=input('Enter prefix for files producet by the program:')
+        Prefix=input('Enter prefix for files produced by the program:')
     for i in range(N):
         t0 = time.time()
-        data_saver('dataJK/'+Prefix+'data'+str(i)+'.csv', n)
+        data_saver('dataJK/'+Prefix+str(i), n)
         deltat = time.time() - t0 
         print(f'File {i+1} of {N} saved. Total time: {deltat:.2f}')
     
