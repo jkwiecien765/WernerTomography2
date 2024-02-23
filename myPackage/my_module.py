@@ -588,101 +588,84 @@ def data_generator(dm=None):
     angle = np.real(ans['angle'])
     rotation = np.real(ans['parameters'])
     opt_matrix, vis = vis_optimizer_dm(dm, density_matrix(rotate_matrix(rho2(angle, 1), rotation[0], rotation[1])), printing = False)
-    vis = np.real(vis)
     opt_matrix.name = 'angle=' + str(angle) + ', vis=' + str(vis)
-    opt_matrix.matrix = np.real(opt_matrix.matrix/np.trace(opt_matrix.matrix))
+    opt_matrix.matrix = opt_matrix.matrix/np.trace(opt_matrix.matrix)
     hist = np.real(dm.bins()['counts']).tolist()
     
-    return {'Matrix': dm.matrix.tolist(), 'Bins': hist, 'Angle': angle, 'Visibility': vis, 'Rotation': rotation,
-            'Distance': Frobenius_dist(dm, opt_matrix), 'MatrixFidelity': matrix_fidelity(dm, opt_matrix),
-            'HistogramFidelity': classical_fidelity(dm, opt_matrix), 'Covering': classical_fidelity2(dm, opt_matrix),
-            'ConcurrenceOriginal': concurrence(dm), 'ConcurrenceOpt': concurrence(opt_matrix), 
-            'CHSHViolationMOriginal': CHSHviolation_measure(dm), 'CHSHViolationMOpt': CHSHviolation_measure(opt_matrix)}
+    return {'Matrix': dm.matrix.tolist(), 'Bins': hist, 'Angle': angle, 'Visibility': np.real(vis), 'Rotation': rotation,
+            'Distance': np.real(Frobenius_dist(dm, opt_matrix)), 'MatrixFidelity': np.real(matrix_fidelity(dm, opt_matrix)),
+            'HistogramFidelity': np.real(classical_fidelity(dm, opt_matrix)), 'Covering': np.real(classical_fidelity2(dm, opt_matrix)),
+            'ConcurrenceOriginal': np.real(concurrence(dm)), 'ConcurrenceOpt': np.real(concurrence(opt_matrix)), 
+            'CHSHViolationMOriginal': np.real(CHSHviolation_measure(dm)), 'CHSHViolationMOpt': np.real(CHSHviolation_measure(opt_matrix))}
 
 def data_order(dictionary):
-    binsDF = pd.DataFrame(dictionary['Bins'])
     bins = np.linspace(0,1,101)
     bins2 = []
     for i in range(100):
         bins2.append('[' + str(round(bins[i],2)) + ', ' + str(round(bins[i+1],2)) + ']')
-    bins2 = pd.Series(bins2, name='Index')
-    bins3 = ['Bins']*100
-    bins3 = pd.Series(bins3, name='Category')
-    binsDF = pd.merge(binsDF, bins2, left_index=True, right_index=True)
-    binsDF = pd.merge(binsDF, bins3, left_index=True, right_index=True)
-    binsDF.set_index(['Category','Index'], inplace=True)
-    binsDF = binsDF.transpose()
+    binsDF = pd.DataFrame({0: dictionary['Bins'], 'Index': bins2}).set_index(['Index']).transpose()
+    binsDF = binsDF
+
     matrixList = []
     matrixIndex = []
-    matrixType = ['Matrix'] * 16
     for i in range(4):
         for j in range(4):
             matrixList.append(dictionary['Matrix'][i][j])
             matrixIndex.append(str(i)+','+str(j))
-    matrixDF = pd.DataFrame({'Index': matrixIndex, 0: matrixList, 'Category': matrixType})
-    matrixDF.set_index(['Category', 'Index'], inplace=True)
-    matrixDF = matrixDF.transpose()
-    allDF=pd.merge(binsDF, matrixDF, left_index=True, right_index=True)
+    matrixDF = pd.DataFrame({'Index': matrixIndex, 0: matrixList}).set_index(['Index']).transpose()
+    matrixDF = matrixDF
     
     rotationList = []
     rotationIndexl0 = []
-    rotationIndexl1 = ['Rotation']*6
     for i in range(2):
         for j in range(3):
             rotationList.append(dictionary['Rotation'][i][j])
             rotationIndexl0.append(3*i+j)
-    rotationDF = pd.DataFrame({'Category': rotationIndexl1, 'Index': rotationIndexl0, 0: rotationList})
-    rotationDF = rotationDF.set_index(['Category', 'Index']).transpose()
-    allDF = pd.merge(allDF, rotationDF, left_index=True, right_index=True)
-    
+    rotationDF = pd.DataFrame({'Index': rotationIndexl0, 0: rotationList}).set_index(['Index']).transpose()
+
     paramsList = [dictionary['Angle'], dictionary['Visibility']]
     paramsIndexl0= ['Angle', 'Visibility']
-    paramsIndexl1 = ['OptimalState']*2
-    paramsDF = pd.DataFrame({'Category': paramsIndexl1, 'Index': paramsIndexl0, 0: paramsList})
-    paramsDF = paramsDF.set_index(['Category', 'Index']).transpose()
-    allDF = pd.merge(allDF, paramsDF, left_index=True, right_index=True)
+    paramsDF = pd.DataFrame({'Index': paramsIndexl0, 0: paramsList}).set_index(['Index']).transpose()
     
-    measuresIndexl1 = ['Measures'] * 8
     measuresIndexl0 = ['Distance',  'MatrixFidelity', 'HistogramFidelity', 'Covering', 'ConcurrenceOriginal', 'ConcurrenceOpt', 'CHSHViolationMOriginal', 'CHSHViolationMOpt']
     measuresList = [dictionary[key] for key in measuresIndexl0]
-    measuresDF = pd.DataFrame({'Category': measuresIndexl1, 'Index': measuresIndexl0, 0: measuresList})
-    measuresDF = measuresDF.set_index(['Category', 'Index']).transpose()
-    allDF = pd.merge(allDF, measuresDF, left_index=True, right_index=True)    
+    measuresDF = pd.DataFrame({'Index': measuresIndexl0, 0: measuresList}).set_index(['Index']).transpose()
         
-    return allDF
+    return [binsDF, matrixDF, rotationDF, paramsDF, measuresDF]
 
 
-def data_saver(name, N=1000):
-    df = data_order(data_generator())
-    for i in range(N-1):
-        df=pd.concat((df, data_order(data_generator())))
-        print(f'Successfuly simulated {i+1} of {N} samples')
+def data_saver(name, n=1000):
     
-    df = df.reset_index().drop('index', axis=1)    
-    df.transpose().to_csv(name, index=True)
-    df = pd.read_csv(name)
-    df = df.set_index(['Category', 'Index']).transpose()
+    categories = ('Bins', 'Matrix','Rotation', 'OptimalState', 'Measures')     
+    dfs = data_order(data_generator())
+    for i in range(n-1):
+        t0=time.time()
+        for j, df in enumerate(data_order(data_generator())):
+            dfs[j] = pd.concat((dfs[j], df))
+        deltat = time.time() - t0
+        print(f'Successfuly simulated {i+1} of {n} samples. Time elapsed: {deltat:.2f}')
+    for i, df in enumerate(dfs):
+        df = df.reset_index(drop=True)    
+        df.to_csv(name+categories[i]+'.csv', index=True, index_label='Index')
+        
+def data_save_iterator(N=None, n=None, Prefix=None):
     
-def data_save_iterator(N=1000, n=1000, Prefix=''):
+    if(N==None):
+        N=int(input('Enter number of files to produce (N):'))
+    if(n==None):
+        n=int(input('Enter number of samples in each file (n):'))
+    if(Prefix==None):
+        Prefix=input('Enter prefix for files produced by the program:')
     for i in range(N):
-        data_saver('dataJK/'+Prefix+'data'+str(i)+'.csv', n)
-
-def data_reader(directory='dataJK'):
-    import os
-    df = pd.DataFrame()
-    for file in os.listdir(directory):
-        temp = pd.read_csv(directory+'/'+file, index_col=['Category', 'Index']).transpose()
-        df = pd.concat((df,temp))
-    return df.reset_index().drop('index', axis=1)
+        t0 = time.time()
+        data_saver('dataJK/'+Prefix+str(i), n)
+        deltat = time.time() - t0 
+        print(f'File {i+1} of {N} saved. Total time: {deltat:.2f}')
 
 class samples():
     def __init__(self, df=None):
         if(df==None):
-            self.Bins = pd.DataFrame()
-            self.Matrix = pd.DataFrame()
-            self.OptimalState = pd.DataFrame()
-            self.Measures = pd.DataFrame()
-            self.Rotation = pd.DataFrame()
+            pass
         else:
             self.Bins = df.Bins
             self.Matrix = df.Matrix
@@ -703,40 +686,53 @@ class samples():
         self.OptimalState = pd.read_csv(destination+'OptimalState.csv', index_col='Index')
         self.Measures = pd.read_csv(destination+'Measures.csv', index_col='Index')
         self.Rotation = pd.read_csv(destination+'Rotation.csv', index_col='Index')
-        self.Matrix.values = np.comp
+        for col in self.Matrix.columns:
+            self.Matrix[col] = self.Matrix[col].apply(complex)
     
     def histogram(self, index):
         if(type(index)==int):
             plt.stairs(self.Bins.iloc[index].values)
         else:
-            plt.stairs(self.Bins.loc[index].transpose().values.flatten())
+            raise ValueError('Index must be an int')
 
     def opt_histogram(self, index):
         if(type(index)==int):
             density_matrix(rho2(self.OptimalState.loc[index].Angle, self.OptimalState.loc[index].Visibility)).histogram()            
         else:
-            density_matrix(rho2(self.OptimalState.loc[index].Angle.values, self.OptimalState.loc[index].Visibility.values)).histogram()
-
+            raise ValueError('Index must be an int')
+        
     def double_plot(self, index):
         if(type(index)==int):
             double_plot(density_matrix(rho2(self.OptimalState.loc[index].Angle, self.OptimalState.loc[index].Visibility)),
                 self.Bins.iloc[index].values)
         else:
-            double_plot(density_matrix(rho2(self.OptimalState.loc[index].Angle.values, self.OptimalState.loc[index].Visibility.values)),
-                        self.Bins.loc[index].transpose().values.reshape(-1,100))
-
+            raise ValueError('Index must be an int')
 
        
         
-def load_samples(destination):
+def load_samples(destination, categories = ['Matrix', 'Measures', 'Bins', 'OptimalState', 'Rotation']):
     samps = samples()
-    samps.Bins = pd.read_csv(destination+'Bins.csv', index_col='Index')
-    samps.Matrix = pd.read_csv(destination+'Matrix.csv',index_col='Index')
-    samps.OptimalState = pd.read_csv(destination+'OptimalState.csv', index_col='Index')
-    samps.Measures = pd.read_csv(destination+'Measures.csv', index_col='Index')
-    samps.Rotation = pd.read_csv(destination+'Rotation.csv', index_col='Index')
+    names = ['Matrix', 'Measures', 'Bins', 'OptimalState', 'Rotation']
+    for cat in categories:
+        if cat in names:
+            eval('samps.'+ cat +' = pd.read_csv(destination+cat+".csv", index_col="Index")')
+    if 'Matrix' in categories:
+        for col in samps.Matrix.columns:
+            samps.Matrix[col] = samps.Matrix[col].apply(complex)
     return samps
 
 
 
+def join_data():
+    from os import listdir
+    names = ['Matrix', 'Measures', 'Bins', 'OptimalState', 'Rotation']
+    all=[eval('alldata.'+name).loc[[False]*len(alldata.Matrix)] for name in names]
+    for f in listdir('dataJK/obliczenia_2'):
+        for i, name in enumerate(names):
+            if name in f:
+                all[i] = pd.concat((all[i], pd.read_csv('dataJK/obliczenia_2/'+f, index_col='Index')))
+    
+    for i, name in enumerate(names):
+        all[i].to_csv('all_complex'+name+'.csv')             
+        
         

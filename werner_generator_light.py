@@ -420,13 +420,4 @@ def data_save_iterator(N=None, n=None, Prefix=None):
         print(f'File {i+1} of {N} saved. Total time: {deltat:.2f}')
     
 
-def data_reader(directory='dataJK'):
-    import os
-    df = pd.DataFrame()
-    for file in os.listdir(directory):
-        temp = pd.read_csv(directory+'/'+file, index_col=['Category', 'Index']).transpose()
-        df = pd.concat((df,temp))
-    return df.reset_index().drop('index', axis=1)
-
-
 data_save_iterator(N=N, n=n, Prefix=Prefix)
