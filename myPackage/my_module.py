@@ -665,7 +665,11 @@ def data_save_iterator(N=None, n=None, Prefix=None):
 class samples():
     def __init__(self, df=None):
         if(df==None):
-            pass
+            self.Bins = pd.DataFrame()
+            self.Matrix = pd.DataFrame()
+            self.OptimalState = pd.DataFrame()
+            self.Measures = pd.DataFrame()
+            self.Rotation = pd.DataFrame()
         else:
             self.Bins = df.Bins
             self.Matrix = df.Matrix
@@ -703,11 +707,16 @@ class samples():
         
     def double_plot(self, index):
         if(type(index)==int):
-            double_plot(density_matrix(rho2(self.OptimalState.loc[index].Angle, self.OptimalState.loc[index].Visibility)),
+            double_plot(density_matrix(rho2(self.OptimalState.iloc[index].Angle, self.OptimalState.iloc[index].Visibility)),
                 self.Bins.iloc[index].values)
         else:
             raise ValueError('Index must be an int')
 
+    def density_matrix(self, idx):
+        return density_matrix(np.reshape(self.Matrix.iloc[idx], (4,4)))
+    
+    def opt_density_matrix(self, idx):
+        return density_matrix(rho2(self.OptimalState.Angle.iloc[idx], self.OptimalState.Visiblity.iloc[idx]))
        
         
 def load_samples(destination, categories = ['Matrix', 'Measures', 'Bins', 'OptimalState', 'Rotation']):
@@ -715,7 +724,7 @@ def load_samples(destination, categories = ['Matrix', 'Measures', 'Bins', 'Optim
     names = ['Matrix', 'Measures', 'Bins', 'OptimalState', 'Rotation']
     for cat in categories:
         if cat in names:
-            eval('samps.'+ cat +' = pd.read_csv(destination+cat+".csv", index_col="Index")')
+            exec('samps.'+ cat +' = pd.read_csv(destination+cat+".csv", index_col="Index")')
     if 'Matrix' in categories:
         for col in samps.Matrix.columns:
             samps.Matrix[col] = samps.Matrix[col].apply(complex)
@@ -723,7 +732,7 @@ def load_samples(destination, categories = ['Matrix', 'Measures', 'Bins', 'Optim
 
 
 
-def join_data():
+def join_data(alldata):
     from os import listdir
     names = ['Matrix', 'Measures', 'Bins', 'OptimalState', 'Rotation']
     all=[eval('alldata.'+name).loc[[False]*len(alldata.Matrix)] for name in names]

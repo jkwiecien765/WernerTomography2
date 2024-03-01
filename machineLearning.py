@@ -5,12 +5,16 @@ import pandas as pd
 from myPackage.my_module import *
 #%%
 data = load_samples('alldata')
+datac = load_samples('all_complex')
 #%%
 data.Bins.head()
 #%%
 features = tf.constant(data.Bins)
 target1 = tf.constant(data.Matrix.join(data.Measures.Distance))
 target2 = tf.constant(data.OptimalState, dtype=tf.double)
+features_c = tf.constant(datac.Bins)
+target1_c = tf.constant(datac.Matrix.join(datac.Measures.Distance))
+target2_c = tf.constant(datac.OptimalState, dtype=tf.double)
 #%%
 def loss_function1(trues, parameters_preds):
     loss=0
@@ -27,19 +31,38 @@ def loss_function2(y_true, y_pred):
     loss0 = tf.keras.losses.MeanSquaredError(y_true[:,0], y_pred[:,0])
     loss1 = tf.keras.losses.MeanSquaredError(y_true[:,1], y_pred[:,1])
     return np.sqrt(loss0**2 + loss1**2)
+#%%
+centiles = [(np.percentile(datac.OptimalState.Angle, i), np.percentile(datac.OptimalState.Visibility, j)) for i in range(0, 100, 20) for j in range(0, 100, 20)]
+segments = [(i,j) for i in np.linspace(0, max(datac.OptimalState.Angle),5) for j in np.linspace(0,1,5)]
+
+#%%
+def find_idx1(x):
+    return next(i for i, val in enumerate(centiles) if val[0]>=x[0] and val[1]>=x[1])
+def find_idx2(x):
+    return next(i for i, val in enumerate(segments) if val[0]>=x[0] and val[1]>=x[1])
+
+#%%
+
+datac.Measures['AngleVisDiscrete'] = pd.Series([find_idx2(x) for x in zip(data.OptimalState.Angle, data.OptimalState.Visibility)], dtype=int)
+#%%
+target12_c = tf.constant(datac.Measures.AngleVisDiscrete)
 
 # %%
 from tensorflow.keras import Sequential, Model
 from tensorflow.keras.layers import Dense, Conv1D, Input
-input = Input(shape=(100,))
-conv = Conv1D(1, 5)(input)
-hid1 = Dense(95, activation='sigmoid')(conv)
-out = Dense(2, activation='sigmoid')(hid1)
+from tensorflow.keras.losses import SparseCategoricalCrossentropy
 
-model = Model(input, out)
-model.compile('SGD', loss='MSE')
+def model_ang_vis():
+    input = Input(shape=(100,))
+    hid1 = Dense(95, activation='sigmoid')(input)
+    hid2 = Dense(95, activation='sigmoid')(input)
+    out = Dense(25, activation='softmax')(hid2)
+    loss = SparseCategoricalCrossentropy()
+    return Model(input, out)
+model = model_ang_vis()
+model.compile('Adam', loss=loss)
 #%%
-model.fit(features, target2, batch_size=1000, epochs=10, validation_split = 0.2)
+model.fit(features_c, target12_c, batch_size=1000, epochs=10, validation_split = 0.2)
 # %%
 model.predict(features[:100])  
 # %%
