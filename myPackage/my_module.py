@@ -58,17 +58,10 @@ def unitary_mat2(params):
     return u1
 
 def unitary_mat3(L=2):
-    #mat=np.zeros((4,4))
-    
-    mat=np.random.normal(size=(L,L,2)).view(np.complex128).reshape(L,L,)
-    mat2=mat.copy()
-    for i in range(L):
-            for j in range(i):
-                mat2[i] -= mat2[j] * np.inner(np.conjugate(mat2[j]), mat[i]) / np.inner(np.conjugate(mat2[j]), mat2[j])
-            print(mat2[i], end=' ')
-            mat2[i] /= np.sqrt(np.real(np.inner(np.conjugate(mat2[i]), mat2[i])))
-            print(mat2[i])
-    return np.array(mat2)
+    from scipy import stats
+    mat = stats.unitary_group.rvs(L)
+    mat = mat / np.power(np.linalg.det(mat), 1/L)
+    return np.array(mat)
 
 #Density matrix of Werner state and its generalisation
 def rho2(th, vis):
@@ -320,7 +313,7 @@ def rand_PSDM(dim, seed=None):
         
 def mean_over_unitars(matrix, N=100000, recording=False):
     '''Takes a matrix or 4x4 list/ndarray and translates it N times over unitary matrices. If recording=True, it returns also a pandas.DataFrame with each iteration of the loop'''
-    matrix=np.array(matrix)
+    matrix=(matrix.matrix if type(matrix)==density_matrix else matrix)
     record=pd.DataFrame()
     for param in parameters[0:N]:
         if recording:
@@ -330,7 +323,6 @@ def mean_over_unitars(matrix, N=100000, recording=False):
         uB=np.array(unitary_mat2(param[1]))
         u=tens_prod2d(uA,uB)
         matrix = u@matrix@(np.transpose(np.conjugate(u)))
-        matrix = np.real(matrix)
         #matrix /= np.trace(matrix)
     if recording:
         record.reset_index(inplace=True)
@@ -350,13 +342,11 @@ def mean_over_unitars2(initial_matrix, N=100000, recording=False):
     ser=pd.Series(np.asarray(matrix).flatten()).to_frame().T
     record=pd.concat([record, ser])
     
-    for param in parameters[0:N]:
-        
-                
+    for param in parameters[0:N]:        
         uA=np.array(unitary_mat2(param[0]))
         uB=np.array(unitary_mat2(param[1]))
         u=tens_prod2d(uA,uB)
-        final_matrix += np.real(u@initial_matrix@(np.transpose(np.conjugate(u)))/N)
+        final_matrix += u@initial_matrix@(np.transpose(np.conjugate(u)))/N
         if recording:
             matrix=final_matrix*N/len(record)
             ser=pd.Series(np.asarray(matrix).flatten()).to_frame().T
