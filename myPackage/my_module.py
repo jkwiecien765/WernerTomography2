@@ -48,14 +48,21 @@ def tens_prod2d(u1,u2):
     return np.array(u3)
 
 
-def unitary_mat2(params):
+def unitary_mat2(params=None):
     
-    th = params[0]
-    alpha = params[1]
-    beta = params[2]
-    u1=np.array([[np.exp(1j* alpha)*np.cos(th), np.exp(1j* beta)*np.sin(th)],\
-                    [-np.exp(-1j* beta)*np.sin(th),np.exp(-1j* alpha)*np.cos(th)]])
-    return u1
+    if(params!=None):
+        th = params[0]
+        alpha = params[1]
+        beta = params[2]
+        u1=np.array([[np.exp(1j* alpha)*np.cos(th), np.exp(1j* beta)*np.sin(th)],\
+                        [-np.exp(-1j* beta)*np.sin(th),np.exp(-1j* alpha)*np.cos(th)]])
+        return u1
+    else:
+        from scipy import stats
+        mat = stats.unitary_group.rvs(2)
+        mat = mat / np.power(np.linalg.det(mat), 1/2)
+        return np.array(mat)
+
 
 def unitary_mat3(L=2):
     from scipy import stats
@@ -89,23 +96,21 @@ def aT(matrix):
 
 
 
-def rotate_matrix(matrix, paramsA, paramsB):
+def rotate_matrix(matrix, paramsA=None, paramsB=None):
     matrix = matrix.matrix if type(matrix) == density_matrix else matrix
     uA = unitary_mat2(paramsA)
     uB = unitary_mat2(paramsB)
     uAB = tens_prod2d(uA, uB)
     return np.transpose(np.conjugate(uAB))@matrix@uAB   
 
-def obs(rho,parA = [-1,0,0], parB = [-1,0,0]):
+def obs(rho,parA = None, parB = None):
     '''Simulation of observation of density matrix with unitary matrices of given parameters (defaults to random) 
         returns probability of observation as being in 00 state'''
-    parA = rand_phase() if parA[0]==-1 else parA
-    parB = rand_phase() if parB[0]==-1 else parB
     uA = unitary_mat2(parA)
     uB = unitary_mat2(parB)    
-    u=tens_prod2d(uA,uB)
-    zer=np.outer(ZeroZero,ZeroZero)
-    p=rho@(np.transpose(np.conjugate(u)))@zer@u
+    u = tens_prod2d(uA,uB)
+    zer = np.outer(ZeroZero,ZeroZero)
+    p = rho@(np.transpose(np.conjugate(u)))@zer@u
     return np.real(np.trace(p))
 
 
@@ -315,12 +320,12 @@ def mean_over_unitars(matrix, N=100000, recording=False):
     '''Takes a matrix or 4x4 list/ndarray and translates it N times over unitary matrices. If recording=True, it returns also a pandas.DataFrame with each iteration of the loop'''
     matrix=(matrix.matrix if type(matrix)==density_matrix else matrix)
     record=pd.DataFrame()
-    for param in parameters[0:N]:
+    for i in range(N):
         if recording:
             ser=pd.Series(np.append(np.asarray(matrix).flatten(), np.trace(matrix))).to_frame().T
             record=pd.concat([record, ser])    
-        uA=np.array(unitary_mat2(param[0]))
-        uB=np.array(unitary_mat2(param[1]))
+        uA=np.array(unitary_mat2())
+        uB=np.array(unitary_mat2())
         u=tens_prod2d(uA,uB)
         matrix = u@matrix@(np.transpose(np.conjugate(u)))
         #matrix /= np.trace(matrix)
@@ -342,9 +347,9 @@ def mean_over_unitars2(initial_matrix, N=100000, recording=False):
     ser=pd.Series(np.asarray(matrix).flatten()).to_frame().T
     record=pd.concat([record, ser])
     
-    for param in parameters[0:N]:        
-        uA=np.array(unitary_mat2(param[0]))
-        uB=np.array(unitary_mat2(param[1]))
+    for i in range(N):        
+        uA=np.array(unitary_mat2())
+        uB=np.array(unitary_mat2())
         u=tens_prod2d(uA,uB)
         final_matrix += u@initial_matrix@(np.transpose(np.conjugate(u)))/N
         if recording:
