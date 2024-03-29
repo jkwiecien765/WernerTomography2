@@ -48,9 +48,9 @@ def tens_prod2d(u1,u2):
     return np.array(u3)
 
 
-def unitary_mat2(params=None):
+def unitary_mat2(params='rand'):
     
-    if(params!=None):
+    if(params!='rand'):
         th = params[0]
         alpha = params[1]
         beta = params[2]
@@ -75,7 +75,7 @@ def rho2(th, vis):
     '''returns 4x4 ndarray matrix of Werner state
     first argument is angle of sine in the formula, second is the visibility'''
      
-    entgl=np.outer(np.sin(th),ZeroOne).flatten()+np.outer(np.cos(th),OneZero).flatten()
+    entgl=np.sin(th)*ZeroOne+np.cos(th)*OneZero
     return vis * np.outer(entgl,entgl)\
           + (1-vis)/4 * np.identity(4)
 
@@ -341,7 +341,7 @@ def mean_over_unitars(matrix, N=100000, recording=False):
 def mean_over_unitars2(initial_matrix, N=100000, recording=False):
     '''Takes a matrix or 4x4 list/ndarray and takes average of N translations over unitary matrices. If recording=True, it returns also a pandas.DataFrame with each iteration of the loop'''
     initial_matrix = np.array(initial_matrix)
-    final_matrix = np.array(np.zeros([4,4]))
+    final_matrix = np.array(np.zeros([4,4]), dtype='complex128')
     record = pd.DataFrame()
     matrix=final_matrix
     ser=pd.Series(np.asarray(matrix).flatten()).to_frame().T
@@ -349,8 +349,7 @@ def mean_over_unitars2(initial_matrix, N=100000, recording=False):
     
     for i in range(N):        
         uA=np.array(unitary_mat2())
-        uB=np.array(unitary_mat2())
-        u=tens_prod2d(uA,uB)
+        u=tens_prod2d(uA,uA)
         final_matrix += u@initial_matrix@(np.transpose(np.conjugate(u)))/N
         if recording:
             matrix=final_matrix*N/len(record)
