@@ -48,9 +48,9 @@ def tens_prod2d(u1,u2):
     return np.array(u3)
 
 
-def unitary_mat2(params='rand'):
+def unitary_mat2(params=None):
     
-    if(params!='rand'):
+    if(params!=None):
         th = params[0]
         alpha = params[1]
         beta = params[2]
@@ -369,7 +369,7 @@ def mean_over_unitars2(initial_matrix, N=100000, recording=False):
 
 def concurrence(dm):
     rho = dm.matrix if type(dm)==density_matrix else np.array(dm)  #making sure rho is of np.array type
-    rhod = tens_prod2d(Pauli[2], Pauli[2])@np.transpose(np.conjugate(rho))@tens_prod2d(Pauli[2], Pauli[2])
+    rhod = tens_prod2d(Pauli[2], Pauli[2])@np.conjugate(rho)@tens_prod2d(Pauli[2], Pauli[2])
     lambs = np.linalg.eigvals(rho@rhod)
     lambs = np.sqrt(lambs)
     l1 = max(lambs)
