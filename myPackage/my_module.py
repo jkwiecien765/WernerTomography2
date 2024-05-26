@@ -47,6 +47,13 @@ def tens_prod2d(u1,u2):
     u3=np.concatenate((ua,ub),0)
     return np.array(u3)
 
+def unitary_mat_par(params):
+    th = params[0]
+    alpha = params[1]
+    beta = params[2]
+    u1=np.array([[np.exp(1j* alpha)*np.cos(th), np.exp(1j* beta)*np.sin(th)],\
+                    [-np.exp(-1j* beta)*np.sin(th),np.exp(-1j* alpha)*np.cos(th)]])
+    return u1
 
 def unitary_mat2(params=None):
     
@@ -94,6 +101,12 @@ def aT(matrix):
     matrix = F@matrix.T@F
     return matrix 
 
+def rotate_matrix_par(matrix, paramsA, paramsB):
+    matrix = matrix.matrix if type(matrix) == density_matrix else matrix
+    uA = unitary_mat_par(paramsA)
+    uB = unitary_mat_par(paramsB)
+    uAB = tens_prod2d(uA, uB)
+    return np.transpose(np.conjugate(uAB))@matrix@uAB 
 
 
 def rotate_matrix(matrix, paramsA=None, paramsB=None):
