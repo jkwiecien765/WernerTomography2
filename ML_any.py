@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
-from myPackage.my_module import *
+#from myPackage.my_module import *
 from torchvision.transforms import ToTensor
 
 
@@ -24,10 +24,15 @@ import pickle
 with open('ML_all_samples2.dat', 'wb') as f:
     pickle.dump(samps2, f)
 
-# %%
+#%%
 import pickle
 with open('ML_all_samples.dat', 'rb') as f:
     samps = pickle.load(f)
+
+# %%
+import pickle
+with open('ML_all_samples2.dat', 'rb') as f:
+    samps2 = pickle.load(f)
 
 #%%
 class all_dataset(Dataset):
@@ -56,10 +61,13 @@ class Net(nn.Module):
             nn.Linear(50, 100),
             nn.Sigmoid(),
             nn.Dropout(p=0.5),
-            nn.Linear(100,25),
+            nn.Linear(100,50),
             nn.Sigmoid(),
             nn.Dropout(p=0.3),
-            nn.Linear(25,20),
+            nn.Linear(50,70),
+            nn.Sigmoid(),
+            nn.Dropout(p=0.3),
+            nn.Linear(70,20),
             nn.Sigmoid(),
             nn.Dropout(p=0.3),
         )
@@ -69,7 +77,7 @@ class Net(nn.Module):
         x = self.hidden_layers(x)
         x = self.output_layer(x)
         return x   
-
+        
 #%%
 #Trainig & validation loop
 def fit(model, samples_train, samples_val, batch_size=10, lr=0.05, epochs=10, dataset = all_dataset, criterion=nn.MSELoss()):    
@@ -121,8 +129,9 @@ def evaluate_model(model, samples_eval, batch_size=10, dataset=all_dataset):
 model = fit(Net(), samps[:200000], samps[200000:250000], epochs=10, batch_size=100)
 
 # %%
-model = fit(Net(output=32), samps2[:20000], samps2[20000:25000], epochs=10, batch_size=100)
+model2 = fit(Net(output=32), samps2[:20000], samps2[20000:25000], epochs=10, batch_size=100)
 
 # %%
-model[torch.Tensor(samps2[1][0]).float()]
+model.eval()
+model(torch.Tensor(samps[10][0]).float())
 # %%
