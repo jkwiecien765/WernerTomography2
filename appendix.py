@@ -1,3 +1,5 @@
+# %% Inital denfinitions and imports
+
 # Functions for Werner app
 import numpy as np
 import matplotlib.pyplot as plt
@@ -5,9 +7,7 @@ import pandas as pd
 from collections.abc import Iterable
 from scipy.linalg import sqrtm
 from numpy import pi
-from .__init__ import parameters
-
-
+parameters=np.load('parameters.npy')
 ## Useful matrices
 
 #Statevectors 1 and 2 qubit
@@ -271,7 +271,8 @@ def CHSHviolation_measure(dm):
     B = np.sqrt(min(max(0, M-1),1))
     return B
 
-
+####### FITTING THE CLOSEST WERNER STATE ########
+#%%
 ## Optimizer for fitting the closest Werner State
 
 def optimal_matrix_fidelity(dmA):
@@ -300,7 +301,8 @@ def vis_optimizer_dm(dm2, dm1):
     return opt_matrix, vis
 
 
-'''Data generation, ordering & saving'''
+#%% Data generation, ordering & saving (definitions)
+import time
 
 def data_generator(dm=None):
     dm = density_matrix(rand_PSDM()) if dm==None else dm
@@ -464,5 +466,628 @@ def join_data(alldata):
     
     for i, name in enumerate(names):
         all[i].to_csv('all_complex'+name+'.csv')             
+
+#%% Data generation (run)
+data_save_iterator(N=10, n=10, Prefix='example')
         
+####### END OF FITTING THE CLOSEST WERNER STATE ########
+
+####### PROJECTION ONTO SYMMETRIC STATES ########
+
+
+#%% Basic definitions 
+
+def wer(th, v=1, base='psim'):
+    '''
+    Creates Werner state based on parameters of angle, visibility and Bell state
+    Args:
+        th: angle
+        v: visibility (default=1)
+        base: which Bell state to choose. Accepts one of the strings: "psip", "psim", "phip", "phim"
+        which means phi/psi with plus (p) or minus (m) sign (default="psim")
+    Returns:
+        4x4 np.ndarray
+    
+    '''
+    match base:
+        case 'psim':
+            vec = np.sin(th)*OneZero - np.cos(th)*ZeroOne
+        case 'psip':
+            vec = np.sin(th)*OneZero + np.cos(th)*ZeroOne
+        case 'phip':
+            vec = np.sin(th)*OneOne + np.cos(th)*ZeroZero
+        case 'phim':
+            vec =np.sin(th)*OneOne - np.cos(th)*ZeroZero
+        case _:
+            raise ValueError("You must choose one of the following: psip, psim, phip, phim")
+    return v * np.outer(vec,vec) + (1-v)/4 * np.identity(4)
+
+
+# Projection using the explicit formula
+def projection(matrix):
+        return np.real(np.matrix([[matrix[0,0],0,0,matrix[0,3]/2+matrix[3,0]/2],\
+                                  [0,matrix[2,2]/2+matrix[1,1]/2,0,0],\
+                                  [0,0,matrix[2,2]/2+matrix[1,1]/2,0],\
+                                  [matrix[0,3]/2+matrix[3,0]/2,0,0,matrix[3,3]]]))
+
+# Finding optimal rotation and projecting
+def phi_proj(matrixA, target='fidelity'):
+    '''
+    Performs a unitary rotation and projects onto phi+ state (optimizes for fidelity, distance or concurrence)
+    Args:
+        matrixA: matrix to be projected
+        target: function to be optimizes for. One of the following: 'fidelity', 'distance' or 'concurrence'
+    Returns:
+        A dict object:
+            fidelity/distance/concurrence: optimal value of the target function
+            parameters: 2x3 angles of unitary rotation
+            angle: angle of resulting phi+ state
+            visiblity: visibility of resulting phi+ state
+            projected: np.matrix result of projection
+            original: np.matrix original matrix
+    '''
+    def get_params_phi(matrix):
+        v = 1 - 4*matrix[1,1]
+        if v==0:
+            return 0, 0    
+        alph = np.arcsin(matrix[0,3]/v*2)/2
+        return alph, v    
+    from scipy.optimize import differential_evolution
         
+    def f(params, matrixA):
+        matrixA = matrixA.matrix if type(matrixA) == density_matrix else matrixA
+        paramsA = params[:3]
+        paramsB = params[3:]
+        projected = projection(matrixA)
+        rotated = rotate_matrix_par(projected, paramsA, paramsB)
+        if target=='fidelity':
+            return -1*fidelity(density_matrix(rotated), matrixA)
+        if target=='concurrence':
+            return -1*concurrence(rotated)
+        if target=='distance':
+            return Frobenius_dist(matrixA, rotated)
+    bounds = [(0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi), (0,2*pi)]
+    res = differential_evolution(f, args=(matrixA,), bounds=bounds, workers=1)
+    
+    if target=='distance':
+        res['fun'] = -res['fun']
+        
+    paramsA = res['x'][:3]
+    paramsB = res['x'][3:]
+    matrix_proj =rotate_matrix_par(projection(matrixA), paramsA, paramsB)
+    angle, vis = get_params_phi(matrix_proj)
+    dist = Frobenius_dist(matrix_proj, matrixA)
+    conc = concurrence(density_matrix(matrix_proj))
+    conc_org = concurrence(density_matrix(matrixA))
+    fid = fidelity(matrixA, matrix_proj)   
+    return {'distance': dist, 'concurrence' : conc, 'fidelity': fid,\
+            'parameters': [paramsA, paramsB], 'angle': angle,\
+            'visibility': vis, 'projected': matrix_proj, 'original': matrixA, 'target': target, 'concurrence_org':conc_org}    
+
+# Better matrix printig
+def matrix_print(func):
+    def wrapper(*args, **kwargs):
+        out=func(*args, **kwargs)
+        out = np.array(out) if type(out)=='numpy.matrix' else out
+        s = [[str(f'{e.real:.3f} + {e.imag:.3f}i ') for e in row] for row in out]
+        lens = [max(map(len, col)) for col in zip(*s)]
+        fmt = '\t'.join('{{:{}}}'.format(x) for x in lens)
+        table = [fmt.format(*row) for row in s]
+        print('\n'.join(table))
+    return wrapper
+
+# Projection by integration
+
+@matrix_print
+def int_projection(dm, N=10000):
+
+    qubit_switch = np.matrix([[1,0,0,0],[0,0,1,0],[0,1,0,0],[0,0,0,1]])
+        
+    def phase_rotation(phi=np.random.random()*2*pi):
+        from scipy.linalg import expm
+        sig_z = np.array([[1,0],[0,-1]], dtype='complex')
+        U = tens_prod2d(expm((1j * phi * sig_z)), expm((-1j * phi * sig_z)))
+        return U
+    
+    def phase_rotation_dag(phi=np.random.random()*2*pi):
+        return np.transpose(np.conjugate(phase_rotation(phi)))
+    
+    proj = np.zeros(shape=(4,4), dtype='complex')
+    dm = dm.matrix if type(dm)=='density_matrix' else dm
+    for i in range(N):
+        phi=np.random.random()*2*pi
+        rotated = phase_rotation(phi)@dm@phase_rotation_dag(phi)
+        switched = qubit_switch@rotated@qubit_switch
+        proj += (np.transpose(rotated + switched) + rotated + switched)/4
+    
+    proj = proj/N
+    return proj
+            
+# Data generation & save (definitions)
+
+df_raw=pd.DataFrame({'distance':[], 'concurrence':[],'fidelity':[], 'target':[], 'concurrence_org':[]})
+import warnings
+with warnings.catch_warnings():
+    warnings.filterwarnings('ignore')
+    for i in range(10000):
+        state = rand_PSDM(4)
+        res = phi_proj(state, target='distance')
+        df_raw.loc[len(df_raw)] = [res['distance'], res['concurrence'], res['fidelity'], res['target'], res['concurrence_org']]
+        res = phi_proj(state, target='fidelity')
+        df_raw.loc[len(df_raw)] = [res['distance'], res['concurrence'], res['fidelity'], res['target'], res['concurrence_org']]
+        res = phi_proj(state, target='concurrence')
+        df_raw.loc[len(df_raw)] = [res['distance'], res['concurrence'], res['fidelity'], res['target'], res['concurrence_org']]
+        if i%10 == 9:
+            print(f'{i+1} out of 10000 done')        
+    
+df_raw.to_csv('projection.csv', index=False)
+
+# %% Visualisation of integral projection converging to the result of explicit formulas (definitions)
+
+def int_projection_conv(dm, N=10000):
+
+    qubit_switch = np.matrix([[1,0,0,0],[0,0,1,0],[0,1,0,0],[0,0,0,1]])
+        
+    def phase_rotation(phi=np.random.random()*2*pi):
+        from scipy.linalg import expm
+        sig_z = np.array([[1,0],[0,-1]], dtype='complex')
+        U = tens_prod2d(expm((1j * phi * sig_z)), expm((-1j * phi * sig_z)))
+        return U
+    
+    def phase_rotation_dag(phi=np.random.random()*2*pi):
+        return np.transpose(np.conjugate(phase_rotation(phi)))
+    
+    def projection(matrix):
+        return np.real(np.matrix([[matrix[0,0],0,0,matrix[0,3]/2+matrix[3,0]/2],\
+                                    [0,matrix[2,2]/2+matrix[1,1]/2,0,0],\
+                                    [0,0,matrix[2,2]/2+matrix[1,1]/2,0],\
+                                    [matrix[0,3]/2+matrix[3,0]/2,0,0,matrix[3,3]]]))        
+    
+    proj = np.zeros(shape=(4,4), dtype='complex')
+    errs = np.zeros(shape = N)
+    dm = dm.matrix if type(dm)=='density_matrix' else dm
+    for i in range(N):
+        phi=np.random.random()*2*pi
+        rotated = phase_rotation(phi)@dm@phase_rotation_dag(phi)
+        switched = qubit_switch@rotated@qubit_switch
+        proj += (np.transpose(rotated + switched) + rotated + switched)/4
+        errs[i] = Frobenius_dist(projection(dm), proj/(i+1))
+    
+    proj = proj/N
+    return errs
+
+# %% Visualisation of integral projection converging to the result of explicit formulas (run)
+
+hist=[]
+for i in range(5):
+    hist.append(int_projection_conv(rand_PSDM(4), N=1000000))   
+
+plt.yscale('log')
+plt.xscale('log')
+plt.grid(True)
+plt.xlabel('Number of iterations')
+plt.ylabel('Frobenius distance')
+plt.title('Convergence of integral projection')
+for i in range(3):
+    plt.plot(hist[-i-1])
+
+plt.show()
+
+# %% Data analysis
+df_raw = pd.read_csv('projection.csv')
+df = df_raw.copy(deep=True)
+df['concurrence_diff'] = df.concurrence_org - df.concurrence
+df.loc[df['concurrence_org']==0, 'concurrence_diff']=np.nan
+df['1 - fidelity'] = 1 - df['fidelity']
+import seaborn as sns
+df_melt=df.melt(['target'], value_vars = ['1 - fidelity', 'distance', 'concurrence_diff'], var_name='quantity')
+df_melt['target'] = df_melt['target'].astype('category')
+plt.ylim(-0.1,1)
+sns.barplot(data=df_melt,  orient='v', x='target', y='value', hue='quantity', errorbar='sd', estimator='median')
+plt.show()
+
+#%% Data analysis continued
+df_melt.loc[np.logical_and(df_melt.target=='concurrence', df_melt.quantity=='concurrence_diff')].hist(bins = np.arange(0, 0.6, 0.025))
+plt.title('Concurrence difference while optimising for maximum concurrence')
+plt.xlabel('Concurrence difference')
+plt.ylabel('Counts')
+plt.grid(False)
+plt.show()
+
+
+####### END OF PROJECTION ONTO SYMMETRIC STATES ########
+
+####### NEURAL NETWORKS ########
+# %% Necessary imports
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.utils.data import Dataset, DataLoader
+
+####### CASE OF GENERIC STATES #######
+# %% Data load, reformatting & save
+data = load_samples('all_complex')
+samps = [(x, y) for x, y in zip(data.Bins.values, data.OptimalState.values)]
+import pickle
+with open('ML_all_samples.dat', 'wb') as f:
+    pickle.dump(samps, f)
+
+# %% Reformatted data load    
+import pickle
+with open('ML_all_samples.dat', 'rb') as f:
+    samps = pickle.load(f)
+    
+# %% Definition of dataset and neural network architecture
+class all_dataset(Dataset):
+    
+    def __init__(self,samples):
+        super(Dataset, self).__init__()
+        self.samples = samples
+    
+    def __len__(self):
+        return len(self.samples)
+    
+    def __getitem__(self, idx):
+        hist, params = self.samples[idx]
+        hist = torch.from_numpy(hist).float()
+        params = torch.Tensor(params).float()
+        return hist, params
+    
+class Net(nn.Module):
+    
+    def __init__(self, input=100, output=2):
+        super().__init__()
+        
+        self.input_layer = nn.Linear(input, 50)
+        self.output_layer = nn.Linear(20, output)
+        self.hidden_layers = nn.Sequential(
+            nn.Linear(50, 100),
+            nn.Sigmoid(),
+            nn.Dropout(p=0.5),
+            nn.Linear(100,50),
+            nn.Sigmoid(),
+            nn.Dropout(p=0.3),
+            nn.Linear(50,70),
+            nn.Sigmoid(),
+            nn.Dropout(p=0.3),
+            nn.Linear(70,20),
+            nn.Sigmoid(),
+            nn.Dropout(p=0.3),
+        )
+    
+    def forward(self, x):
+        x = self.input_layer(x)
+        x = self.hidden_layers(x)
+        x = self.output_layer(x)
+        return x   
+        
+#%%
+#Trainig & validation loop
+def fit(model, samples_train, samples_val, batch_size=10, lr=0.05, epochs=10, dataset = all_dataset, criterion=nn.MSELoss()):    
+    from torchmetrics import MeanSquaredError
+    data_loader_train = DataLoader(dataset(samples_train), shuffle=True, batch_size=batch_size)
+    data_loader_val = DataLoader(dataset(samples_val), shuffle=True, batch_size=batch_size)
+    optimizer = torch.optim.RMSprop(model.parameters(), lr=lr, weight_decay=0.5) 
+    metrics = MeanSquaredError()
+
+    for epoch in range(epochs):
+        #Training
+        model.train()
+        for hist, params in data_loader_train:
+            optimizer.zero_grad()
+            pred = model(hist)
+            loss = criterion(pred, params)
+            loss.backward()
+            optimizer.step()
+            metrics(pred, params)
+        train_loss = metrics.compute()
+        metrics.reset()
+        #Validation
+        model.eval()
+        with torch.no_grad():
+            for hist, params in data_loader_val:
+                pred = model(hist)
+                metrics(pred, params)
+        val_loss = metrics.compute()
+        metrics.reset()
+        
+        print(f'Epoch {epoch+1}/{epochs}: training loss: {train_loss:.5f}, validation loss: {val_loss:.5f}')
+    
+    return model    
+    
+# %%
+# Evaluation
+def evaluate_model(model, samples_eval, batch_size=10, dataset=all_dataset):
+    from torchmetrics import MeanSquaredError
+    metrics = MeanSquaredError()
+    data_loader = DataLoader(dataset(samples_eval), shuffle=True, batch_size=batch_size)
+    model.eval()
+    with torch.no_grad():
+        for hist, params in data_loader:
+            pred = model(hist)
+            metrics(pred, params)
+    return metrics.compute()
+
+#%% Training
+model = fit(Net(), samps[:200000], samps[200000:250000], epochs=10, batch_size=100)
+
+#%% Comparison of model predicion for two inputs
+model.eval()
+print(model(torch.Tensor(samps[15][0]).float()))
+print(model(torch.Tensor(samps[10][0]).float()))
+####### END OF CASE OF GENERIC STATES #######
+
+####### CASE OF PROJECTED STATES #######
+# %% Integral projection data generation (definitions)
+def data_to_bins(data):
+    counts=np.zeros(100)
+    for dat in data:
+        try:
+            counts[int(dat*100)]+=1/len(data)
+        except IndexError:
+            pass
+    return counts
+
+def projection(matrix):
+    return np.real(np.matrix([[matrix[0,0],0,0,matrix[0,3]/2+matrix[3,0]/2],\
+                                [0,matrix[2,2]/2+matrix[1,1]/2,0,0],\
+                                [0,0,matrix[2,2]/2+matrix[1,1]/2,0],\
+                                [matrix[0,3]/2+matrix[3,0]/2,0,0,matrix[3,3]]]))
+qubit_switch = np.matrix([[1,0,0,0],[0,0,1,0],[0,1,0,0],[0,0,0,1]])
+    
+def phase_rotation(phi=np.random.random()*2*pi):
+    from scipy.linalg import expm
+    sig_z = np.array([[1,0],[0,-1]], dtype='complex')
+    U = tens_prod2d(expm((1j * phi * sig_z)), expm((-1j * phi * sig_z)))
+    return U
+
+def phase_rotation_dag(phi=np.random.random()*2*pi):
+    return np.transpose(np.conjugate(phase_rotation(phi)))
+
+#%% Integral projection data generation (run) & save
+proj_bins=[]
+N=10000
+for i in range(N):
+    initial_matrix = rand_PSDM(4)
+    projected = projection(initial_matrix)
+    parameters = [projected[0,0], projected[0,3], projected[1,1], projected[3,3]]
+    proj_data=[]
+    for j in range(2000):
+        phi=np.random.random()*2*pi
+        rotated = phase_rotation(phi)@initial_matrix@phase_rotation_dag(phi)
+        switched = qubit_switch@rotated@qubit_switch
+        proj_data.append(np.trace(np.real(switched@np.outer(ZeroZero,ZeroZero))))
+    
+    proj_bins.append(data_to_bins(proj_data))
+    
+    if (i+1)%10 == 0:
+        print(f'{i+1}/{N} done')
+        
+import pickle
+if len(proj_bins) > 10:
+    with open('ML_int_proj.dat', 'wb') as file:
+        pickle.dump(proj_bins, file)
+
+# %% Integral projection data load
+import pickle
+with open('ML_int_proj.dat', 'rb') as file:
+    proj_bins_load = pickle.load(file)
+    
+# %% Explicit data projection (run) & save
+def projection(matrix):
+    return np.real(np.matrix([[matrix[0,0],0,0,matrix[0,3]/2+matrix[3,0]/2],\
+                                [0,matrix[2,2]/2+matrix[1,1]/2,0,0],\
+                                [0,0,matrix[2,2]/2+matrix[1,1]/2,0],\
+                                [matrix[0,3]/2+matrix[3,0]/2,0,0,matrix[3,3]]]))
+dat = []
+for i in range(10000):
+    initial_matrix = rand_PSDM(4)
+    projected = projection(initial_matrix)
+    parameters = [projected[0,0], projected[0,3], projected[1,1], projected[3,3]]
+    projected = density_matrix(projected)
+    projected.set(20000)
+    dat.append((projected.data, parameters))
+    if (i+1)%10 == 0:
+        print(f'{i+1}/10000 done')
+
+import pickle
+with open('ML_proj_samps.dat', 'wb') as file:
+    pickle.dump(dat, file)
+        
+# %% Data load & split
+import pickle
+with open('ML_proj_samps.dat', 'rb') as file:
+    samples_load = pickle.load(file)     
+
+samples_train = samples_new[:8000]
+samples_val = samples_new[8000:]
+
+# %% Dataset definition
+class proj_dataset(Dataset):
+    
+    def __init__(self,samples):
+        super(Dataset, self).__init__()
+        self.samples = samples
+    
+    def __len__(self):
+        return len(self.samples)
+    
+    def __getitem__(self, idx):
+        hist, params = self.samples[idx]
+        hist = torch.from_numpy(hist).float()
+        params = torch.Tensor(params).float()
+        return hist, params
+
+class Net(nn.Module):
+    
+    def __init__(self, input=100, output=4):
+        super().__init__()
+        
+        self.input_layer = nn.Linear(input, 50)
+        self.output_layer = nn.Linear(20, output)
+        self.hidden_layers = nn.Sequential(
+            nn.Linear(50, 100),
+            nn.Sigmoid(),
+            nn.Dropout(p=0.5),
+            nn.Linear(100,50),
+            nn.Sigmoid(),
+            nn.Dropout(p=0.3),
+            nn.Linear(50,70),
+            nn.Sigmoid(),
+            nn.Dropout(p=0.3),
+            nn.Linear(70,20),
+            nn.Sigmoid(),
+            nn.Dropout(p=0.3),
+        )
+    
+    def forward(self, x):
+        x = self.input_layer(x)
+        x = self.hidden_layers(x)
+        x = self.output_layer(x)
+        return x   
+
+#Trainig & validation loop
+def fit(model, samples_train, samples_val, batch_size=10, lr=0.05, epochs=10, dataset = proj_dataset, criterion=nn.MSELoss()):    
+    from torchmetrics import MeanSquaredError
+    data_loader_train = DataLoader(dataset(samples_train), shuffle=True, batch_size=batch_size)
+    data_loader_val = DataLoader(dataset(samples_val), shuffle=True, batch_size=batch_size)
+    optimizer = torch.optim.RMSprop(model.parameters(), lr=lr) 
+    metrics = MeanSquaredError()
+
+    for epoch in range(epochs):
+        #Training
+        model.train()
+        for hist, params in data_loader_train:
+            optimizer.zero_grad()
+            pred = model(hist)
+            loss = criterion(pred, params)
+            loss.backward()
+            optimizer.step()
+            metrics(pred, params)
+        train_loss = metrics.compute()
+        metrics.reset()
+        #Validation
+        model.eval()
+        with torch.no_grad():
+            for hist, params in data_loader_val:
+                pred = model(hist)
+                metrics(pred, params)
+        val_loss = metrics.compute()
+        metrics.reset()
+        
+        print(f'Epoch {epoch+1}/{epochs}: training loss: {train_loss:.5f}, validation loss: {val_loss:.5f}')
+    
+    return model    
+    
+# %% Model training
+model = fit(Net(), samples_train, samples_val, batch_size=50, lr=0.05, epochs=10)
+# %% Comparison of model's prediction for two inputs
+model.eval()
+print(model(torch.from_numpy(samples_train[6][0]).float()))
+print(model(torch.from_numpy(samples_train[16][0]).float()))
+
+####### END OF CASE OF PROJECTED STATES #######               
+
+####### CASE OF WERNER STATES #######
+#%% Data load, reformat and split
+df = pd.read_csv('werner_sample.csv', index_col='Unnamed: 0')
+df_test = pd.read_csv('werner_test.csv', index_col='Unnamed: 0')
+def df_to_wer_data(df):
+    wer_data=[]
+    for i in range(len(df)):
+        wer_data.append((df.iloc[i].values[2:], df.iloc[i].values[:2]))
+    return wer_data 
+wer_data = df_to_wer_data(df)
+wer_test = df_to_wer_data(df_test)
+# %% Dataset and neural network definition
+
+class werner_dataset(Dataset):
+    
+    def __init__(self, data, transform = torch.from_numpy):
+        super(Dataset, self).__init__()
+        self.data = data
+        self.transform = transform
+        
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        hist, params = self.data[idx]
+        hist = self.transform(hist).float()
+        params = self.transform(params).float()
+        return hist, params
+    
+class WerNet(nn.Module):
+    
+    def __init__(self, input=100, output=4):
+        super().__init__()
+        
+        self.input_layer = nn.Linear(input, 95)
+        self.output_layer = nn.Linear(95, output)
+        self.hidden_layers = nn.Sequential(
+            nn.Sigmoid(),
+            nn.Linear(95, 95),
+            nn.Sigmoid(),
+            nn.Linear(95,95),
+            nn.Sigmoid(),
+
+        )
+    
+    def forward(self, x):
+        x = self.input_layer(x)
+        x = self.hidden_layers(x)
+        x = self.output_layer(x)
+        return x   
+
+# %% Model training & saving       
+model_wer = fit(WerNet(input=100, output=2), wer_data[:8000], wer_data[8000:], dataset = werner_dataset, epochs=10)
+torch.save(model_wer.state_dict(), 'model_wer.model')
+# %% Model loading
+model_loaded = WerNet(input=100, output=2)
+model_loaded.load_state_dict(torch.load('model_wer.model'))
+# %% Model testing
+df_test = pd.read_csv('werner_test.csv', index_col='Unnamed: 0')
+wer_test = df_to_wer_data(df_test)
+evaluate_model(model_loaded, wer_test, dataset=werner_dataset)
+# %% Finding the worst match
+import torchmetrics
+max_err = 0
+worst_hist=None
+worst_params=None
+model_loaded.eval()
+metrics = torchmetrics.MeanSquaredError() 
+for hist, params in DataLoader(werner_dataset(wer_test), batch_size=1):
+    pred = model_loaded(hist)
+    err = metrics(pred, params)
+    if err > max_err:
+        max_err = err
+        worst_hist = hist
+        worst_pred = pred
+        worst_params = params
+
+alp, vis = worst_pred.detach().numpy()[0]
+worst_dm = density_matrix(rho2(alp, vis))
+plt.stairs(worst_hist.numpy()[0], fill=True)
+plt.stairs(worst_dm.bins()['counts'])
+plt.show()
+# %% Finding the best match
+import torchmetrics
+min_err = 80
+best_hist=None
+best_params=None
+model_loaded.eval()
+metrics = torchmetrics.MeanSquaredError() 
+for hist, params in DataLoader(werner_dataset(wer_test), batch_size=1):
+    pred = model_loaded(hist)
+    err = metrics(pred, params)
+    if err < min_err:
+        min_err = err
+        best_hist = hist
+        best_pred = pred
+        best_params = params
+
+alp, vis = best_pred.detach().numpy()[0]
+best_dm = density_matrix(rho2(alp, vis))
+plt.stairs(best_hist.numpy()[0], fill=True)
+plt.stairs(best_dm.bins()['counts'])
+plt.show()
